@@ -1,8 +1,10 @@
 {
-  "name": "Hairfy WhatsApp",
-  "description": "Sistema de barbearia com integração WhatsApp",
-  "repository": "https://github.com/your-username/your-repo",
-  "keywords": ["node", "express", "whatsapp", "barbershop"],
+  "name": "hairfy-whatsapp",
+  "description": "Sistema completo de barbearia com WhatsApp",
+  "repository": "https://github.com/olucasvolk/hairfy",
+  "logo": "https://node-js-sample.herokuapp.com/node.png",
+  "keywords": ["node", "express", "whatsapp", "barbershop", "react"],
+  "image": "heroku/nodejs",
   "buildpacks": [
     {
       "url": "https://github.com/jontewks/puppeteer-heroku-buildpack"
@@ -13,13 +15,26 @@
   ],
   "env": {
     "NODE_ENV": {
+      "description": "Node environment",
       "value": "production"
     },
     "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": {
+      "description": "Skip Chromium download",
       "value": "true"
     },
     "PUPPETEER_EXECUTABLE_PATH": {
-      "value": "/app/.apt/usr/bin/google-chrome"
+      "description": "Puppeteer executable path",
+      "value": "/app/.apt/usr/bin/google-chrome-stable"
     }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "addons": [],
+  "scripts": {
+    "postdeploy": "echo 'Deploy completed successfully!'"
   }
 }
