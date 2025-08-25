@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { MessageCircle, Smartphone, CheckCircle, XCircle, RefreshCw, Settings, Send } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useDashboard } from '../contexts/DashboardContext';
+import { io, Socket } from 'socket.io-client';
 
 interface WhatsAppSession {
     id: string;
@@ -25,17 +26,65 @@ const WhatsAppConfig: React.FC = () => {
     const { barbershop } = useDashboard();
     const [session, setSession] = useState<WhatsAppSession | null>(null);
     const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+    const [qrCodeImage, setQrCodeImage] = useState<string>('');
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'connection' | 'templates' | 'test'>('connection');
     const [testPhone, setTestPhone] = useState('');
     const [testMessage, setTestMessage] = useState('');
     const [testLoading, setTestLoading] = useState(false);
+    const [socket, setSocket] = useState<Socket | null>(null);
 
     useEffect(() => {
         if (barbershop?.id) {
             fetchWhatsAppData();
+            setupSocket();
         }
+        
+        return () => {
+            if (socket) {
+                socket.disconnect();
+            }
+        };
     }, [barbershop?.id]);
+
+    const setupSocket = () => {
+        if (!barbershop?.id) return;
+
+        const newSocket = io(window.location.origin);
+        setSocket(newSocket);
+
+        // Escutar eventos do WhatsApp
+        newSocket.on(`qr_${barbershop.id}`, (data) => {
+            setQrCodeImage(data.qr);
+            setSession(prev => ({ ...prev!, status: 'connecting' }));
+        });
+
+        newSocket.on(`ready_${barbershop.id}`, (data) => {
+            setSession(prev => ({
+                ...prev!,
+                status: 'connected',
+                is_connected: true,
+                phone_number: `+${data.phone}`
+            }));
+            setQrCodeImage('');
+            updateSessionInDatabase('connected', `+${data.phone}`);
+        });
+
+        newSocket.on(`authenticated_${barbershop.id}`, () => {
+            console.log('WhatsApp autenticado');
+        });
+
+        newSocket.on(`auth_failure_${barbershop.id}`, (data) => {
+            setSession(prev => ({ ...prev!, status: 'error' }));
+            console.error('Falha na autenticação:', data.error);
+        });
+
+        newSocket.on(`disconnected_${barbershop.id}`, (data) => {
+            setSession(prev => ({ ...prev!, status: 'disconnected', is_connected: false }));
+            setQrCodeImage('');
+            updateSessionInDatabase('disconnected');
+        });
+    };
 
     const fetchWhatsAppData = async () => {
         if (!barbershop?.id) return;
@@ -67,11 +116,47 @@ const WhatsAppConfig: React.FC = () => {
         }
     };
 
+    const updateSessionInDatabase = async (status: string, phoneNumber?: string) => {
+        if (!barbershop?.id) return;
+
+        try {
+            const updateData: any = {
+                status,
+                is_connected: status === 'connected',
+                last_connected_at: new Date().toISOString()
+            };
+
+            if (phoneNumber) {
+                updateData.phone_number = phoneNumber;
+            }
+
+            await supabase
+                .from('whatsapp_sessions')
+                .upsert({
+                    barbershop_id: barbershop.id,
+                    ...updateData
+                });
+        } catch (error) {
+            console.error('Erro ao atualizar sessão:', error);
+        }
+    };
+
     const handleConnect = async () => {
+        if (!barbershop?.id) return;
+
         setLoading(true);
         try {
-            // Em produção, apenas mostra uma mensagem informativa
-            alert('WhatsApp integration is available in development mode. Please contact support for production setup.');
+            const response = await fetch(`/api/whatsapp/connect/${barbershop.id}`, {
+                method: 'POST'
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                setSession(prev => ({ ...prev!, status: 'connecting' }));
+            } else {
+                console.error('Erro ao conectar:', result.error);
+            }
         } catch (error) {
             console.error('Erro ao conectar WhatsApp:', error);
         } finally {
@@ -84,15 +169,17 @@ const WhatsAppConfig: React.FC = () => {
 
         setLoading(true);
         try {
-            await supabase
-                .from('whatsapp_sessions')
-                .update({
-                    is_connected: false,
-                    status: 'disconnected'
-                })
-                .eq('barbershop_id', barbershop.id);
+            const response = await fetch(`/api/whatsapp/disconnect/${barbershop.id}`, {
+                method: 'POST'
+            });
 
-            setSession(prev => prev ? { ...prev, is_connected: false, status: 'disconnected' } : null);
+            const result = await response.json();
+            
+            if (result.success) {
+                setSession(prev => prev ? { ...prev, is_connected: false, status: 'disconnected' } : null);
+                setQrCodeImage('');
+                updateSessionInDatabase('disconnected');
+            }
         } catch (error) {
             console.error('Erro ao desconectar WhatsApp:', error);
         } finally {
@@ -101,16 +188,33 @@ const WhatsAppConfig: React.FC = () => {
     };
 
     const handleSendTest = async () => {
-        if (!testPhone || !testMessage) return;
+        if (!testPhone || !testMessage || !barbershop?.id) return;
 
         setTestLoading(true);
         try {
-            // Em produção, apenas simula o envio
-            alert(`Test message would be sent to ${testPhone}: ${testMessage}`);
-            setTestPhone('');
-            setTestMessage('');
+            const response = await fetch(`/api/whatsapp/send/${barbershop.id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    phone: testPhone,
+                    message: testMessage
+                })
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                alert('Mensagem enviada com sucesso!');
+                setTestPhone('');
+                setTestMessage('');
+            } else {
+                alert(`Erro ao enviar mensagem: ${result.error}`);
+            }
         } catch (error) {
             console.error('Erro ao enviar mensagem de teste:', error);
+            alert('Erro ao enviar mensagem');
         } finally {
             setTestLoading(false);
         }
@@ -169,12 +273,23 @@ const WhatsAppConfig: React.FC = () => {
                     )}
                 </div>
 
-                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                    <p className="text-blue-800 text-sm">
-                        <strong>Nota:</strong> A integração completa do WhatsApp está disponível apenas no modo de desenvolvimento. 
-                        Para usar em produção, entre em contato com o suporte.
-                    </p>
-                </div>
+                {qrCodeImage && (
+                    <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                        <h4 className="text-md font-medium text-gray-900 mb-3">
+                            Escaneie o QR Code com seu WhatsApp
+                        </h4>
+                        <div className="flex justify-center">
+                            <img 
+                                src={qrCodeImage} 
+                                alt="QR Code WhatsApp" 
+                                className="w-64 h-64 border border-gray-300 rounded-lg"
+                            />
+                        </div>
+                        <p className="text-sm text-gray-600 mt-3 text-center">
+                            Abra o WhatsApp no seu celular → Menu → Dispositivos conectados → Conectar dispositivo
+                        </p>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -215,7 +330,7 @@ const WhatsAppConfig: React.FC = () => {
 
                     <button
                         onClick={handleSendTest}
-                        disabled={!testPhone || !testMessage || testLoading}
+                        disabled={!testPhone || !testMessage || testLoading || !session?.is_connected}
                         className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
                     >
                         {testLoading ? (
@@ -225,6 +340,12 @@ const WhatsAppConfig: React.FC = () => {
                         )}
                         <span>{testLoading ? 'Enviando...' : 'Enviar Teste'}</span>
                     </button>
+
+                    {!session?.is_connected && (
+                        <p className="text-sm text-amber-600">
+                            ⚠️ WhatsApp deve estar conectado para enviar mensagens
+                        </p>
+                    )}
                 </div>
             </div>
         </div>

@@ -70,9 +70,13 @@ export const useWhatsApp = (barbershopId: string) => {
     messageContent: string,
     appointmentId?: string
   ) => {
+    if (!session?.is_connected) {
+      throw new Error('WhatsApp não está conectado');
+    }
+
     setLoading(true);
     try {
-      // Salvar mensagem no banco como simulação
+      // Salvar mensagem no banco
       const { data, error } = await supabase
         .from('whatsapp_messages')
         .insert({
@@ -82,16 +86,48 @@ export const useWhatsApp = (barbershopId: string) => {
           client_name: clientName,
           message_type: messageType,
           message_content: messageContent,
-          status: 'sent', // Simula como enviado em produção
-          sent_at: new Date().toISOString()
+          status: 'pending'
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      // Em produção, apenas simula o envio
-      console.log(`WhatsApp message simulated: ${clientPhone} - ${messageContent}`);
+      // Enviar mensagem via API real do WhatsApp
+      const response = await fetch(`/api/whatsapp/send/${barbershopId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          phone: clientPhone,
+          message: messageContent
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Atualizar status para enviado
+        await supabase
+          .from('whatsapp_messages')
+          .update({ 
+            status: 'sent',
+            sent_at: new Date().toISOString()
+          })
+          .eq('id', data.id);
+      } else {
+        // Atualizar status para falha
+        await supabase
+          .from('whatsapp_messages')
+          .update({ 
+            status: 'failed',
+            sent_at: new Date().toISOString()
+          })
+          .eq('id', data.id);
+        
+        throw new Error(result.error || 'Falha ao enviar mensagem');
+      }
 
       await fetchMessages();
       return data;
