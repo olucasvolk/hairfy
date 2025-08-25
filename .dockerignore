@@ -1,0 +1,15 @@
+node_modules
+.git
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+npm-debug.log
+.nyc_output
+.coverage
+.coverage.*
+.env.local
+.env.*.local
+dist-ssr
+*.local
+.wwebjs_auth/session*

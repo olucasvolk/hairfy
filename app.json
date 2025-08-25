@@ -1,0 +1,25 @@
+{
+  "name": "Hairfy WhatsApp",
+  "description": "Sistema de barbearia com integração WhatsApp",
+  "repository": "https://github.com/your-username/your-repo",
+  "keywords": ["node", "express", "whatsapp", "barbershop"],
+  "buildpacks": [
+    {
+      "url": "https://github.com/jontewks/puppeteer-heroku-buildpack"
+    },
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "env": {
+    "NODE_ENV": {
+      "value": "production"
+    },
+    "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": {
+      "value": "true"
+    },
+    "PUPPETEER_EXECUTABLE_PATH": {
+      "value": "/app/.apt/usr/bin/google-chrome"
+    }
+  }
+}
