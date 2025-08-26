@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "scripts": {
     "dev": "vite",
-    "build": "chmod +x build.sh && ./build.sh",
+    "build": "vite build",
+    "build:full": "chmod +x build.sh && ./build.sh && npm run build",
     "lint": "eslint .",
     "preview": "vite preview --port 4173 --host",
     "start": "node app-platform-server.js",

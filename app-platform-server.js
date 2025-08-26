@@ -6,6 +6,10 @@ const { Server } = require('socket.io');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const QRCode = require('qrcode');
 
+// Verificar se existe build do React
+const distPath = path.join(__dirname, 'dist');
+const hasReactBuild = fs.existsSync(distPath);
+
 const PORT = process.env.PORT || 3001;
 
 // WhatsApp clients storage
@@ -74,26 +78,66 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Página inicial com instruções
-  if (pathname === '/') {
+  // Servir arquivos estáticos do React (se existir build)
+  if (hasReactBuild && !pathname.startsWith('/api/')) {
+    let filePath = path.join(distPath, pathname === '/' ? 'index.html' : pathname);
+    
+    // Se arquivo não existe, servir index.html (SPA routing)
+    if (!fs.existsSync(filePath)) {
+      filePath = path.join(distPath, 'index.html');
+    }
+    
+    try {
+      const content = fs.readFileSync(filePath);
+      const ext = path.extname(filePath);
+      
+      let contentType = 'text/html';
+      if (ext === '.js') contentType = 'application/javascript';
+      else if (ext === '.css') contentType = 'text/css';
+      else if (ext === '.json') contentType = 'application/json';
+      else if (ext === '.png') contentType = 'image/png';
+      else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+      else if (ext === '.svg') contentType = 'image/svg+xml';
+      
+      res.writeHead(200, { 'Content-Type': contentType });
+      res.end(content);
+      return;
+    } catch (error) {
+      console.error('Erro ao servir arquivo:', error);
+    }
+  }
+
+  // Página inicial com instruções (se não houver build do React)
+  if (pathname === '/' && !hasReactBuild) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Hairfy WhatsApp API</title>
+        <title>Hairfy - Sistema de Barbearia</title>
         <meta charset="utf-8">
         <style>
           body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+          .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; }
           .endpoint { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
           .method { color: #007acc; font-weight: bold; }
         </style>
       </head>
       <body>
-        <h1>🚀 Hairfy WhatsApp API</h1>
-        <p>Servidor funcionando no App Platform!</p>
+        <h1>💈 Hairfy - Sistema de Barbearia</h1>
         
-        <h2>📋 Endpoints disponíveis:</h2>
+        <div class="warning">
+          <h3>⚠️ Frontend não encontrado</h3>
+          <p>O sistema React não foi buildado. Para ver a interface da barbearia, você precisa:</p>
+          <ol>
+            <li>Executar <code>npm run build</code> localmente</li>
+            <li>Fazer commit e push do diretório <code>dist/</code></li>
+            <li>Ou configurar o App Platform para fazer build automático</li>
+          </ol>
+        </div>
+        
+        <h2>🚀 Servidor WhatsApp funcionando!</h2>
+        <p>As APIs do WhatsApp estão disponíveis:</p>
         
         <div class="endpoint">
           <span class="method">GET</span> /health - Status do servidor
@@ -101,27 +145,15 @@ const server = http.createServer(async (req, res) => {
         
         <div class="endpoint">
           <span class="method">POST</span> /api/whatsapp/init - Inicializar WhatsApp
-          <br><small>Body: {"barbershopId": "sua-barbearia"}</small>
         </div>
         
         <div class="endpoint">
-          <span class="method">GET</span> /api/whatsapp/qr?barbershopId=sua-barbearia - Obter QR Code
+          <span class="method">GET</span> /api/whatsapp/qr - Obter QR Code
         </div>
         
         <div class="endpoint">
-          <span class="method">GET</span> /api/whatsapp/status?barbershopId=sua-barbearia - Status da conexão
+          <span class="method">GET</span> /api/whatsapp/status - Status da conexão
         </div>
-        
-        <h2>🧪 Teste rápido:</h2>
-        <p>Acesse: <a href="/health">/health</a> para verificar se está funcionando</p>
-        
-        <h2>📱 Como usar:</h2>
-        <ol>
-          <li>Faça POST para /api/whatsapp/init com seu barbershopId</li>
-          <li>Acesse /api/whatsapp/qr para obter o QR Code</li>
-          <li>Escaneie o QR Code no WhatsApp</li>
-          <li>Pronto! WhatsApp Web conectado</li>
-        </ol>
       </body>
       </html>
     `);
