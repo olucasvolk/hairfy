@@ -8,12 +8,16 @@
     "build:full": "chmod +x build.sh && ./build.sh && npm run build",
     "lint": "eslint .",
     "preview": "vite preview --port 4173 --host",
-    "start": "node uaz-whatsapp-server.js",
+    "start": "node app-platform-complete-server.js",
     "start:do": "node digitalocean-server.js",
     "whatsapp": "node whatsapp-server.js",
     "dev:whatsapp": "node dev-server.js",
     "dev:full": "concurrently \"npm run dev:whatsapp\" \"npm run dev\"",
-    "start:full": "concurrently \"npm run whatsapp\" \"npm run dev\""
+    "start:full": "concurrently \"npm run whatsapp\" \"npm run dev\"",
+    "reminders": "node reminder-server.js",
+    "start:complete": "concurrently \"npm run whatsapp\" \"npm run reminders\" \"npm run dev\"",
+    "start:digitalocean": "node digitalocean-complete-server.js",
+    "start:app-platform": "node app-platform-complete-server.js"
   },
   "dependencies": {
     "@faker-js/faker": "^9.3.0",
@@ -25,6 +29,7 @@
     "date-fns": "^4.1.0",
     "framer-motion": "^11.11.17",
     "lucide-react": "^0.511.0",
+    "node-cron": "^3.0.3",
     "postcss": "^8.4.35",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

@@ -5,7 +5,9 @@ import { Appointment, Service, StaffMember, Product } from '../lib/supabase';
 import { X, Loader2, PlusCircle, Trash2, MessageCircle } from 'lucide-react';
 import { addMinutes, format } from 'date-fns';
 import { useDashboard } from '../contexts/DashboardContext';
-import { useWhatsApp } from '../hooks/useWhatsApp';
+import { sendAppointmentConfirmation } from '../utils/whatsappService';
+import { debugWhatsAppSetup } from '../utils/whatsappDebug';
+
 
 type InitialData = Appointment | Partial<Appointment> | null;
 type AddedProduct = { product: Product; quantity: number };
@@ -25,8 +27,7 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
   initialData,
   barbershopId,
 }) => {
-  const { products: allProducts, staff, services } = useDashboard();
-  const { sendAppointmentConfirmation } = useWhatsApp(barbershopId);
+  const { products: allProducts, staff, services, barbershop } = useDashboard();
   const [formData, setFormData] = useState({
     client_name: '', client_phone: '', client_email: '', service_id: '',
     staff_member_id: '', appointment_date: '', start_time: '', notes: '',
@@ -35,6 +36,8 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
   const [addedProducts, setAddedProducts] = useState<AddedProduct[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [whatsappStatus, setWhatsappStatus] = useState<string | null>(null);
+  const [sendWhatsApp, setSendWhatsApp] = useState(true);
 
   const isEditing = initialData && 'id' in initialData;
 
@@ -156,27 +159,51 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
       }
     }
 
-    // 5. Enviar mensagem de confirmação via WhatsApp (apenas para novos agendamentos)
-    if (!isEditing) {
+    // 5. Enviar confirmação por WhatsApp (apenas para novos agendamentos confirmados)
+    console.log('🔍 VERIFICANDO CONDIÇÕES WHATSAPP:', {
+      isEditing: isEditing,
+      status: formData.status,
+      sendWhatsApp: sendWhatsApp,
+      shouldSend: !isEditing && (formData.status === 'confirmado' || formData.status === 'agendado') && sendWhatsApp
+    });
+    
+    if (!isEditing && (formData.status === 'confirmado' || formData.status === 'agendado') && sendWhatsApp) {
+      console.log('✅ CONDIÇÕES ATENDIDAS - Enviando WhatsApp...');
+      setWhatsappStatus('Enviando confirmação por WhatsApp...');
+      
       try {
-        await sendAppointmentConfirmation({
-          id: savedAppointment.id,
-          client_name: savedAppointment.client_name,
-          client_phone: savedAppointment.client_phone,
-          appointment_date: savedAppointment.appointment_date,
-          start_time: savedAppointment.start_time,
-          service_name: savedAppointment.service_name,
-          service_price: savedAppointment.service_price
-        });
-      } catch (whatsappError) {
-        console.warn('WhatsApp message failed:', whatsappError);
-        // Não bloquear o salvamento se o WhatsApp falhar
-      }
-    }
+        const whatsappResult = await sendAppointmentConfirmation(
+          savedAppointment,
+          {
+            name: barbershop?.name || 'Barbearia',
+            address: barbershop?.address
+          }
+        );
 
-    onSave();
-    onClose();
-    setLoading(false);
+        if (whatsappResult.success) {
+          setWhatsappStatus(`✅ ${whatsappResult.message}`);
+          console.log('✅ Confirmação WhatsApp enviada:', whatsappResult.message);
+        } else {
+          setWhatsappStatus(`⚠️ ${whatsappResult.message}`);
+          console.log('⚠️ Falha no WhatsApp:', whatsappResult.message);
+        }
+      } catch (whatsappError) {
+        setWhatsappStatus('❌ Erro ao enviar WhatsApp');
+        console.error('❌ Erro no envio WhatsApp:', whatsappError);
+      }
+
+      // Aguardar um pouco para mostrar o status do WhatsApp
+      setTimeout(() => {
+        setWhatsappStatus(null);
+        onSave();
+        onClose();
+        setLoading(false);
+      }, 2000);
+    } else {
+      onSave();
+      onClose();
+      setLoading(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -203,7 +230,25 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
             <div><label className="block text-sm font-medium text-gray-600 mb-1">Profissional</label><select value={formData.staff_member_id} onChange={e => setFormData({...formData, staff_member_id: e.target.value})} className="w-full p-2 border rounded-md"><option value="">Qualquer um</option>{staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
             <div><label className="block text-sm font-medium text-gray-600 mb-1">Data</label><input type="date" value={formData.appointment_date} onChange={e => setFormData({...formData, appointment_date: e.target.value})} required className="w-full p-2 border rounded-md"/></div>
             <div><label className="block text-sm font-medium text-gray-600 mb-1">Hora</label><input type="time" value={formData.start_time} onChange={e => setFormData({...formData, start_time: e.target.value})} required className="w-full p-2 border rounded-md"/></div>
-            {isEditing && (<div><label className="block text-sm font-medium text-gray-600 mb-1">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as Appointment['status']})} required className="w-full p-2 border rounded-md"><option value="agendado">Agendado</option><option value="confirmado">Confirmado</option><option value="concluido">Concluído</option><option value="cancelado">Cancelado</option><option value="nao_compareceu">Não Compareceu</option></select></div>)}
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Status</label>
+              <select 
+                value={formData.status} 
+                onChange={e => setFormData({...formData, status: e.target.value as Appointment['status']})} 
+                required 
+                className="w-full p-2 border rounded-md"
+              >
+                <option value="agendado">Agendado</option>
+                <option value="confirmado">Confirmado</option>
+                {isEditing && (
+                  <>
+                    <option value="concluido">Concluído</option>
+                    <option value="cancelado">Cancelado</option>
+                    <option value="nao_compareceu">Não Compareceu</option>
+                  </>
+                )}
+              </select>
+            </div>
           </div>
 
           {/* Products Section */}
@@ -238,6 +283,50 @@ const AppointmentForm: React.FC<AppointmentFormProps> = ({
               <p className="text-lg font-bold">Total: <span className="text-blue-600">R$ {(grandTotal / 100).toFixed(2)}</span></p>
             </div>
           </div>
+
+          {/* Opção de enviar WhatsApp */}
+          {!isEditing && (
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="sendWhatsApp"
+                  checked={sendWhatsApp}
+                  onChange={(e) => setSendWhatsApp(e.target.checked)}
+                  className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                />
+                <label htmlFor="sendWhatsApp" className="flex items-center space-x-2 text-sm text-green-800 cursor-pointer">
+                  <MessageCircle className="h-4 w-4" />
+                  <span>Enviar confirmação por WhatsApp automaticamente</span>
+                </label>
+              </div>
+              
+              {/* Botão de Debug WhatsApp */}
+              <button
+                type="button"
+                onClick={async () => {
+                  console.log('🔍 Iniciando debug WhatsApp...');
+                  const result = await debugWhatsAppSetup(barbershopId);
+                  if (result.success) {
+                    alert('✅ WhatsApp configurado corretamente! Verifique o console para detalhes.');
+                  } else {
+                    alert(`❌ Problema encontrado: ${result.error}`);
+                  }
+                }}
+                className="w-full px-3 py-2 text-xs bg-yellow-100 text-yellow-800 border border-yellow-300 rounded-lg hover:bg-yellow-200 transition-colors"
+              >
+                🔍 Debug WhatsApp (Verificar Console)
+              </button>
+            </div>
+          )}
+
+          {/* Status do WhatsApp */}
+          {whatsappStatus && (
+            <div className="flex items-center space-x-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <MessageCircle className="h-5 w-5 text-blue-600" />
+              <span className="text-sm text-blue-800">{whatsappStatus}</span>
+            </div>
+          )}
 
           <div className="flex justify-end space-x-3 pt-4">
             <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-lg">Cancelar</button>

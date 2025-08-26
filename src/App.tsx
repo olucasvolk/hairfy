@@ -19,6 +19,10 @@ import ProductsManagement from './pages/ProductsManagement';
 import SalesManagement from './pages/SalesManagement';
 import Reports from './pages/Reports';
 import WhatsAppSettings from './pages/WhatsAppSettings';
+import WhatsAppTemplates from './pages/WhatsAppTemplates';
+import WhatsAppTest from './pages/WhatsAppTest';
+import WhatsAppReminders from './pages/WhatsAppReminders';
+
 
 function App() {
   return (
@@ -50,6 +54,10 @@ function App() {
             <Route path="vendas" element={<SalesManagement />} />
             <Route path="relatorios" element={<Reports />} />
             <Route path="whatsapp" element={<WhatsAppSettings />} />
+            <Route path="whatsapp/templates" element={<WhatsAppTemplates />} />
+            <Route path="whatsapp/test" element={<WhatsAppTest />} />
+            <Route path="whatsapp/reminders" element={<WhatsAppReminders />} />
+
           </Route>
 
           <Route path="/login" element={<Login />} />

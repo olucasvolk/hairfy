@@ -1,0 +1,29 @@
+{
+  "name": "barberflow-complete",
+  "version": "1.0.0",
+  "description": "Sistema completo de barbearia com WhatsApp e lembretes automáticos",
+  "main": "digitalocean-complete-server.js",
+  "scripts": {
+    "start": "node digitalocean-complete-server.js",
+    "build": "echo 'Build completed'",
+    "postinstall": "echo 'Dependencies installed'"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.56.0",
+    "whatsapp-web.js": "^1.25.0",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.1",
+    "node-cron": "^3.0.3",
+    "puppeteer": "^23.10.4"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "keywords": [
+    "whatsapp",
+    "barbershop",
+    "reminders",
+    "automation"
+  ]
+}
