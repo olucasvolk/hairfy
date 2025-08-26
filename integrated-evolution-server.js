@@ -10,15 +10,16 @@ let evolutionAvailable = false;
 
 try {
   const baileys = require('@whiskeysockets/baileys');
-  makeWASocket = baileys.default;
+  makeWASocket = baileys.default || baileys.makeWASocket;
   DisconnectReason = baileys.DisconnectReason;
   useMultiFileAuthState = baileys.useMultiFileAuthState;
   Browsers = baileys.Browsers;
   evolutionAvailable = true;
-  console.log('✅ Evolution API integrado carregado');
+  console.log('✅ Evolution API integrado carregado com sucesso');
+  console.log('📦 Baileys version:', require('@whiskeysockets/baileys/package.json').version);
 } catch (error) {
   console.log('❌ Baileys não disponível:', error.message);
-  console.log('🔄 Instalando dependências...');
+  console.log('🔄 Servidor funcionará sem WhatsApp até dependências serem instaladas');
 }
 
 const QRCode = require('qrcode');
@@ -200,10 +201,12 @@ const server = http.createServer(async (req, res) => {
     const barbershopId = pathname.split('/').pop();
     
     if (!evolutionAvailable) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.writeHead(503, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ 
         success: false, 
-        error: 'Evolution API não disponível. Execute: npm install @whiskeysockets/baileys' 
+        error: 'Evolution API ainda não disponível',
+        message: 'Aguarde a instalação das dependências completar',
+        retry: true
       }));
       return;
     }
