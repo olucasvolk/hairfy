@@ -3,19 +3,21 @@ const fs = require('fs');
 const path = require('path');
 const url = require('url');
 const { Server } = require('socket.io');
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const QRCode = require('qrcode');
 
 const PORT = process.env.PORT || 3001;
-const isDev = process.env.NODE_ENV !== 'production';
+
+// WhatsApp clients storage
+const whatsappClients = new Map();
+const qrCodes = new Map(); // Store QR codes temporarily
 
 // Criar servidor HTTP
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
   const method = req.method;
-  
+
   console.log(`${new Date().toISOString()} - ${method} ${pathname}`);
 
   // CORS headers
@@ -57,16 +59,16 @@ const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  transports: ['websocket', 'polling'],
+  allowEIO3: true
 });
-
-// WhatsApp clients storage
-const whatsappClients = new Map();
 
 // WhatsApp API handler
 function handleWhatsAppAPI(req, res, pathname, method) {
   const pathParts = pathname.split('/');
-  
+  console.log(`WhatsApp API: ${method} ${pathname} - Parts:`, pathParts);
+
   if (method === 'POST' && pathParts[3] === 'connect') {
     const barbershopId = pathParts[4];
     if (barbershopId) {
@@ -123,6 +125,17 @@ function handleWhatsAppAPI(req, res, pathname, method) {
     return;
   }
 
+  if (method === 'GET' && pathParts[3] === 'qr') {
+    const barbershopId = pathParts[4];
+    if (barbershopId) {
+      getQRCode(barbershopId, res);
+    } else {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Barbershop ID required' }));
+    }
+    return;
+  }
+
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Endpoint not found' }));
 }
@@ -158,11 +171,16 @@ async function connectWhatsApp(barbershopId, res) {
 
     client.on('qr', async (qr) => {
       console.log(`QR Code gerado para ${barbershopId}`);
-      
+
       // Gerar QR code como imagem
       try {
         const qrImage = await QRCode.toDataURL(qr);
+        qrCodes.set(barbershopId, qrImage);
+
+        // Emit via Socket.IO
         io.emit(`qr_${barbershopId}`, { qr: qrImage });
+
+        console.log(`QR Code armazenado para ${barbershopId}`);
       } catch (error) {
         console.error('Erro ao gerar QR code:', error);
       }
@@ -171,6 +189,10 @@ async function connectWhatsApp(barbershopId, res) {
     client.on('ready', () => {
       console.log(`WhatsApp conectado para ${barbershopId}`);
       const phoneNumber = client.info.wid.user;
+
+      // Remove QR code when connected
+      qrCodes.delete(barbershopId);
+
       io.emit(`ready_${barbershopId}`, { phone: phoneNumber });
     });
 
@@ -254,7 +276,7 @@ async function sendWhatsAppMessage(barbershopId, data, res) {
 function getWhatsAppStatus(barbershopId, res) {
   const client = whatsappClients.get(barbershopId);
   const isConnected = client && client.info;
-  
+
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
     connected: !!isConnected,
@@ -262,10 +284,20 @@ function getWhatsAppStatus(barbershopId, res) {
   }));
 }
 
+function getQRCode(barbershopId, res) {
+  const qrImage = qrCodes.get(barbershopId);
+
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    qr: qrImage || null,
+    hasQR: !!qrImage
+  }));
+}
+
 // Static file server
 function serveStaticFile(req, res, pathname) {
   let filePath = path.join(__dirname, 'dist');
-  
+
   if (pathname === '/') {
     filePath = path.join(filePath, 'index.html');
   } else {
@@ -336,7 +368,7 @@ server.listen(PORT, '0.0.0.0', () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully');
-  
+
   // Disconnect all WhatsApp clients
   for (const [barbershopId, client] of whatsappClients) {
     try {
@@ -346,7 +378,7 @@ process.on('SIGTERM', async () => {
       console.error(`Error disconnecting client ${barbershopId}:`, error);
     }
   }
-  
+
   server.close(() => {
     console.log('Process terminated');
   });
@@ -354,7 +386,7 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully');
-  
+
   // Disconnect all WhatsApp clients
   for (const [barbershopId, client] of whatsappClients) {
     try {
@@ -364,6 +396,6 @@ process.on('SIGINT', async () => {
       console.error(`Error disconnecting client ${barbershopId}:`, error);
     }
   }
-  
+
   process.exit(0);
 });
