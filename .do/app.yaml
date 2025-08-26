@@ -1,4 +1,4 @@
-name: hairfy-baileys-simple
+name: hairfy-uaz-whatsapp
 services:
 - name: web
   source_dir: /

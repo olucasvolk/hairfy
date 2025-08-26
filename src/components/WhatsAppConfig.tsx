@@ -74,7 +74,7 @@ const WhatsAppConfig: React.FC = () => {
             });
             
             newSocket.on('connect', () => {
-                console.log('✅ Socket.IO conectado');
+                console.log('✅ Socket.IO conectado para UAZ API');
             });
 
             newSocket.on('connect_error', (error) => {
@@ -88,37 +88,25 @@ const WhatsAppConfig: React.FC = () => {
 
             setSocket(newSocket);
 
-        // Escutar eventos do WhatsApp
-        newSocket.on(`qr_${barbershop.id}`, (data) => {
-            setQrCodeImage(data.qr);
-            setSession(prev => ({ ...prev!, status: 'connecting' }));
-        });
-
-        newSocket.on(`ready_${barbershop.id}`, (data) => {
-            setSession(prev => ({
-                ...prev!,
-                status: 'connected',
-                is_connected: true,
-                phone_number: `+${data.phone}`
-            }));
-            setQrCodeImage('');
-            updateSessionInDatabase('connected', `+${data.phone}`);
-        });
-
-        newSocket.on(`authenticated_${barbershop.id}`, () => {
-            console.log('WhatsApp autenticado');
-        });
-
-        newSocket.on(`auth_failure_${barbershop.id}`, (data) => {
-            setSession(prev => ({ ...prev!, status: 'error' }));
-            console.error('Falha na autenticação:', data.error);
-        });
-
-            newSocket.on(`disconnected_${barbershop.id}`, () => {
-                setSession(prev => ({ ...prev!, status: 'disconnected', is_connected: false }));
-                setQrCodeImage('');
-                updateSessionInDatabase('disconnected');
+            // Escutar eventos gerais do WhatsApp (UAZ API não usa eventos específicos por instância)
+            newSocket.on('whatsapp_status', (data) => {
+                console.log('📱 Status WhatsApp atualizado:', data);
+                if (data.status === 'connected') {
+                    setSession(prev => ({
+                        ...prev!,
+                        status: 'connected',
+                        is_connected: true,
+                        phone_number: data.phoneNumber
+                    }));
+                    setQrCodeImage('');
+                    updateSessionInDatabase('connected', data.phoneNumber);
+                } else if (data.status === 'disconnected') {
+                    setSession(prev => ({ ...prev!, status: 'disconnected', is_connected: false }));
+                    setQrCodeImage('');
+                    updateSessionInDatabase('disconnected');
+                }
             });
+
         } catch (error) {
             console.error('❌ Erro ao configurar Socket.IO:', error);
             // Continue sem Socket.IO, usando apenas polling HTTP
