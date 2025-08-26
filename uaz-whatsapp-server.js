@@ -449,7 +449,7 @@ const server = http.createServer(async (req, res) => {
                                 console.log(`📊 Novo status após connect:`, JSON.stringify(newStatusCheck, null, 2));
 
                                 // Se ainda não tem QR Code, tentar forçar restart da instância
-                                const newQR = newStatusCheck?.instance?.qrcode || newStatusCheck?.qrcode;
+                                let newQR = newStatusCheck?.instance?.qrcode || newStatusCheck?.qrcode;
                                 if (!newQR && attempt <= 2) {
                                     console.log(`🔄 Tentativa ${attempt}: Sem QR Code, tentando restart da instância...`);
 
@@ -460,12 +460,13 @@ const server = http.createServer(async (req, res) => {
 
                                         newStatusCheck = await callUazAPI('/instance/status', 'GET', null, false, instanceToken);
                                         console.log(`📊 Status após restart:`, JSON.stringify(newStatusCheck, null, 2));
+                                        
+                                        // Atualizar newQR após restart
+                                        newQR = newStatusCheck?.instance?.qrcode || newStatusCheck?.qrcode;
                                     } catch (restartError) {
                                         console.log(`⚠️ Erro ao reiniciar instância: ${restartError.message}`);
                                     }
                                 }
-
-                                const newQR = newStatusCheck?.instance?.qrcode || newStatusCheck?.qrcode;
                                 const newPairCode = newStatusCheck?.instance?.paircode || newStatusCheck?.paircode;
                                 const newConnected = newStatusCheck?.connected && newStatusCheck?.loggedIn;
 
