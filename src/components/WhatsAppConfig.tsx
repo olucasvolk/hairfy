@@ -509,6 +509,26 @@ const WhatsAppConfig: React.FC = () => {
                         >
                             🏥 Health Check
                         </button>
+                        <button
+                            onClick={async () => {
+                                try {
+                                    console.log('🧪 Testando UAZ API...');
+                                    const response = await fetch('/api/test-uaz');
+                                    const data = await response.json();
+                                    
+                                    if (data.success) {
+                                        alert(`✅ UAZ API funcionando!\n\n${JSON.stringify(data, null, 2)}`);
+                                    } else {
+                                        alert(`❌ UAZ API com problema:\n\n${JSON.stringify(data, null, 2)}`);
+                                    }
+                                } catch (error) {
+                                    alert(`❌ Erro ao testar UAZ API: ${error.message}`);
+                                }
+                            }}
+                            className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded"
+                        >
+                            🧪 Testar UAZ API
+                        </button>
                     </div>
                 </div>
             </div>

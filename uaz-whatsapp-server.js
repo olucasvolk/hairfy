@@ -24,40 +24,69 @@ console.log(`📦 Build React: ${hasReactBuild ? '✅ Encontrado' : '❌ Não en
 
 // Função para fazer requisições à UAZ API
 const callUazAPI = async (endpoint, method = 'GET', data = null) => {
-    const options = {
-        method,
-        headers: {
-            'Content-Type': 'application/json',
-            'token': UAZ_TOKEN
-        }
-    };
-
-    if (data) {
-        options.body = JSON.stringify(data);
-    }
+    // Testar diferentes formatos de autenticação
+    const authHeaders = [
+        { 'token': UAZ_TOKEN },
+        { 'Authorization': `Bearer ${UAZ_TOKEN}` },
+        { 'Authorization': UAZ_TOKEN },
+        { 'x-api-key': UAZ_TOKEN },
+        { 'apikey': UAZ_TOKEN }
+    ];
 
     const fullUrl = `${UAZ_API_URL}${endpoint}`;
     console.log(`🔗 UAZ API: ${method} ${fullUrl}`);
+    console.log(`🔑 Token: ${UAZ_TOKEN.substring(0, 10)}...`);
 
     if (data) {
         console.log(`📤 Dados enviados:`, JSON.stringify(data, null, 2));
     }
 
-    try {
-        const response = await fetch(fullUrl, options);
-        const result = await response.json();
+    // Tentar cada formato de header
+    for (let i = 0; i < authHeaders.length; i++) {
+        const authHeader = authHeaders[i];
+        const headerName = Object.keys(authHeader)[0];
+        
+        console.log(`🔄 Tentativa ${i + 1}: Header '${headerName}'`);
+        
+        const options = {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                ...authHeader
+            }
+        };
 
-        console.log(`📥 Resposta UAZ (${response.status}):`, JSON.stringify(result, null, 2));
-
-        if (!response.ok) {
-            throw new Error(result.message || result.error || `HTTP ${response.status}`);
+        if (data) {
+            options.body = JSON.stringify(data);
         }
 
-        return result;
-    } catch (error) {
-        console.error('❌ Erro UAZ API:', error.message);
-        throw error;
+        try {
+            const response = await fetch(fullUrl, options);
+            const result = await response.json();
+
+            console.log(`📥 Resposta UAZ (${response.status}) com '${headerName}':`, JSON.stringify(result, null, 2));
+
+            if (response.ok) {
+                console.log(`✅ Sucesso com header '${headerName}'!`);
+                return result;
+            } else if (result.message !== 'Invalid token' && result.error !== 'Invalid token') {
+                // Se não é erro de token, pode ser outro problema
+                throw new Error(result.message || result.error || `HTTP ${response.status}`);
+            }
+            
+            console.log(`❌ Falhou com '${headerName}': ${result.message || result.error}`);
+            
+        } catch (error) {
+            console.log(`❌ Erro com '${headerName}': ${error.message}`);
+            
+            // Se é o último formato, relançar o erro
+            if (i === authHeaders.length - 1) {
+                throw error;
+            }
+        }
     }
+
+    throw new Error('Todos os formatos de autenticação falharam');
 };
 
 // Criar servidor HTTP
@@ -95,6 +124,47 @@ const server = http.createServer(async (req, res) => {
             activeInstances: Array.from(instanceStatus.keys()),
             reactBuild: hasReactBuild
         }));
+        return;
+    }
+
+    // Teste de conectividade UAZ API
+    if (pathname === '/api/test-uaz' && method === 'GET') {
+        try {
+            console.log('🧪 Testando conectividade UAZ API...');
+            
+            // Testar endpoint básico
+            const testEndpoints = ['/health', '/status', '/instance/status'];
+            
+            let testResult = null;
+            for (const testEndpoint of testEndpoints) {
+                try {
+                    console.log(`🔍 Testando endpoint: ${testEndpoint}`);
+                    testResult = await callUazAPI(testEndpoint);
+                    console.log(`✅ Sucesso no endpoint: ${testEndpoint}`);
+                    break;
+                } catch (error) {
+                    console.log(`❌ Falhou no endpoint ${testEndpoint}: ${error.message}`);
+                }
+            }
+            
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: !!testResult,
+                message: testResult ? 'UAZ API conectada!' : 'Falha na conexão UAZ API',
+                result: testResult,
+                testedEndpoints: testEndpoints,
+                token: `${UAZ_TOKEN.substring(0, 10)}...`
+            }));
+            
+        } catch (error) {
+            console.error('❌ Erro no teste UAZ API:', error);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                error: error.message,
+                message: 'Erro ao testar UAZ API'
+            }));
+        }
         return;
     }
 
