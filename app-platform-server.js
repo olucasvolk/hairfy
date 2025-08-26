@@ -250,7 +250,21 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Status do WhatsApp
+  // Status do WhatsApp (com barbershopId na URL)
+  if (pathname.startsWith('/api/whatsapp/status/') && method === 'GET') {
+    const barbershopId = pathname.split('/').pop();
+    const client = whatsappClients.get(barbershopId);
+    
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      connected: client ? true : false,
+      hasQR: qrCodes.has(barbershopId),
+      status: client ? 'connected' : 'disconnected'
+    }));
+    return;
+  }
+
+  // Status do WhatsApp (com query parameter)
   if (pathname === '/api/whatsapp/status' && method === 'GET') {
     const barbershopId = parsedUrl.query.barbershopId;
     const client = whatsappClients.get(barbershopId);
@@ -258,8 +272,172 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       connected: client ? true : false,
-      hasQR: qrCodes.has(barbershopId)
+      hasQR: qrCodes.has(barbershopId),
+      status: client ? 'connected' : 'disconnected'
     }));
+    return;
+  }
+
+  // Conectar WhatsApp
+  if (pathname.startsWith('/api/whatsapp/connect/') && method === 'POST') {
+    const barbershopId = pathname.split('/').pop();
+    
+    if (whatsappClients.has(barbershopId)) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Already connected' }));
+      return;
+    }
+
+    try {
+      console.log(`🚀 Conectando WhatsApp para barbearia: ${barbershopId}`);
+
+      const client = new Client({
+        authStrategy: new LocalAuth({
+          clientId: barbershopId,
+          dataPath: './.wwebjs_auth'
+        }),
+        puppeteer: getPuppeteerConfig()
+      });
+
+      whatsappClients.set(barbershopId, client);
+
+      client.on('qr', (qr) => {
+        console.log('📱 QR Code gerado');
+        qrCodes.set(barbershopId, qr);
+        
+        if (io) {
+          io.emit('qr', { barbershopId, qr });
+        }
+      });
+
+      client.on('ready', () => {
+        console.log('✅ WhatsApp conectado!');
+        qrCodes.delete(barbershopId);
+        
+        if (io) {
+          io.emit('ready', { barbershopId });
+        }
+      });
+
+      client.on('disconnected', (reason) => {
+        console.log('❌ WhatsApp desconectado:', reason);
+        whatsappClients.delete(barbershopId);
+        qrCodes.delete(barbershopId);
+        
+        if (io) {
+          io.emit('disconnected', { barbershopId, reason });
+        }
+      });
+
+      await client.initialize();
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Connecting...' }));
+
+    } catch (error) {
+      console.error('❌ Erro ao conectar WhatsApp:', error);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: error.message }));
+    }
+    return;
+  }
+
+  // Desconectar WhatsApp
+  if (pathname.startsWith('/api/whatsapp/disconnect/') && method === 'POST') {
+    const barbershopId = pathname.split('/').pop();
+    const client = whatsappClients.get(barbershopId);
+    
+    if (client) {
+      try {
+        await client.destroy();
+        whatsappClients.delete(barbershopId);
+        qrCodes.delete(barbershopId);
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Disconnected' }));
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Already disconnected' }));
+    }
+    return;
+  }
+
+  // Reset WhatsApp
+  if (pathname.startsWith('/api/whatsapp/reset/') && method === 'POST') {
+    const barbershopId = pathname.split('/').pop();
+    const client = whatsappClients.get(barbershopId);
+    
+    if (client) {
+      try {
+        await client.destroy();
+      } catch (error) {
+        console.log('Erro ao destruir cliente:', error);
+      }
+    }
+    
+    whatsappClients.delete(barbershopId);
+    qrCodes.delete(barbershopId);
+    
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, message: 'Reset completed' }));
+    return;
+  }
+
+  // Obter QR Code (com barbershopId na URL)
+  if (pathname.startsWith('/api/whatsapp/qr/') && method === 'GET') {
+    const barbershopId = pathname.split('/').pop();
+    const qr = qrCodes.get(barbershopId);
+    
+    if (qr) {
+      try {
+        const qrImage = await QRCode.toDataURL(qr);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ qr: qrImage }));
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Erro ao gerar QR Code' }));
+      }
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'QR Code não encontrado' }));
+    }
+    return;
+  }
+
+  // Enviar mensagem
+  if (pathname.startsWith('/api/whatsapp/send/') && method === 'POST') {
+    const barbershopId = pathname.split('/').pop();
+    const client = whatsappClients.get(barbershopId);
+    
+    if (!client) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'WhatsApp não conectado' }));
+      return;
+    }
+
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', async () => {
+      try {
+        const { phone, message } = JSON.parse(body);
+        
+        // Formatar número de telefone
+        const formattedPhone = phone.replace(/\D/g, '') + '@c.us';
+        
+        await client.sendMessage(formattedPhone, message);
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Mensagem enviada' }));
+      } catch (error) {
+        console.error('Erro ao enviar mensagem:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
     return;
   }
 
