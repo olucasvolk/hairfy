@@ -8,7 +8,7 @@
     "build:full": "chmod +x build.sh && ./build.sh && npm run build",
     "lint": "eslint .",
     "preview": "vite preview --port 4173 --host",
-    "start": "node app-platform-complete-server.js",
+    "start": "node app-platform-reminders-only.js",
     "start:do": "node digitalocean-server.js",
     "whatsapp": "node whatsapp-server.js",
     "dev:whatsapp": "node dev-server.js",
@@ -31,6 +31,8 @@
     "lucide-react": "^0.511.0",
     "node-cron": "^3.0.3",
     "postcss": "^8.4.35",
+    "puppeteer": "^23.10.4",
+    "qrcode": "^1.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^6.28.0",
@@ -38,7 +40,8 @@
     "socket.io": "^4.8.1",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.8.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "whatsapp-web.js": "^1.25.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.27.0",
