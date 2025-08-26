@@ -1,9 +1,9 @@
-name: hairfy-whatsapp
+name: hairfy-evolution
 services:
 - name: web
   source_dir: /
   github:
-    repo: seu-usuario/seu-repo
+    repo: olucasvolk/hairfy
     branch: main
   run_command: npm start
   environment_slug: node-js
@@ -15,7 +15,7 @@ services:
     value: production
   - key: PORT
     value: "3001"
-  - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
-    value: "false"
-  - key: PUPPETEER_EXECUTABLE_PATH
-    value: ""
+  - key: EVOLUTION_API_URL
+    value: "https://evolution-api.com"
+  - key: EVOLUTION_API_KEY
+    value: "YOUR_EVOLUTION_API_KEY_HERE"
