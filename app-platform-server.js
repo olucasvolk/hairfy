@@ -52,9 +52,26 @@ const getPuppeteerConfig = async () => {
     
     console.log('✅ Usando @sparticuz/chromium otimizado');
     console.log('📍 Executable path:', config.executablePath);
+    console.log('🔧 Chromium args:', chromium.args.length, 'argumentos adicionais');
   } catch (error) {
     console.log('📦 Usando Chromium padrão do puppeteer-core');
     console.log('❌ Erro ao carregar @sparticuz/chromium:', error.message);
+    
+    // Fallback: tentar encontrar Chromium no sistema
+    const possiblePaths = [
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium',
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable'
+    ];
+    
+    for (const path of possiblePaths) {
+      if (require('fs').existsSync(path)) {
+        config.executablePath = path;
+        console.log('🔍 Encontrado Chromium em:', path);
+        break;
+      }
+    }
   }
 
   return config;
@@ -378,8 +395,15 @@ const server = http.createServer(async (req, res) => {
       });
 
       client.on('loading_screen', (percent, message) => {
-        console.log('📱 Carregando WhatsApp:', percent, message);
+        console.log('📱 Carregando WhatsApp:', percent + '%', message);
       });
+
+      // Timeout para inicialização
+      setTimeout(() => {
+        if (!whatsappClients.has(barbershopId)) {
+          console.log('⏰ Timeout na inicialização do WhatsApp');
+        }
+      }, 60000); // 60 segundos
 
       await client.initialize();
 
@@ -540,9 +564,21 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`🚀 Servidor WhatsApp rodando na porta ${PORT}`);
   console.log(`📱 App Platform otimizado para WhatsApp Web`);
+  
+  // Testar configuração do Chromium na inicialização
+  try {
+    const config = await getPuppeteerConfig();
+    console.log('🔧 Configuração do Chromium:');
+    console.log('   - Executable Path:', config.executablePath || 'Padrão do sistema');
+    console.log('   - Args count:', config.args.length);
+    console.log('   - Platform:', process.platform);
+    console.log('   - Architecture:', process.arch);
+  } catch (error) {
+    console.error('❌ Erro ao verificar Chromium:', error.message);
+  }
 });
 
 // Graceful shutdown
