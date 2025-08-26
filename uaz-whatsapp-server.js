@@ -45,9 +45,9 @@ const callUazAPI = async (endpoint, method = 'GET', data = null) => {
     for (let i = 0; i < authHeaders.length; i++) {
         const authHeader = authHeaders[i];
         const headerName = Object.keys(authHeader)[0];
-        
+
         console.log(`🔄 Tentativa ${i + 1}: Header '${headerName}'`);
-        
+
         const options = {
             method,
             headers: {
@@ -73,12 +73,12 @@ const callUazAPI = async (endpoint, method = 'GET', data = null) => {
                 // Se não é erro de token, pode ser outro problema
                 throw new Error(result.message || result.error || `HTTP ${response.status}`);
             }
-            
+
             console.log(`❌ Falhou com '${headerName}': ${result.message || result.error}`);
-            
+
         } catch (error) {
             console.log(`❌ Erro com '${headerName}': ${error.message}`);
-            
+
             // Se é o último formato, relançar o erro
             if (i === authHeaders.length - 1) {
                 throw error;
@@ -131,10 +131,10 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/test-uaz' && method === 'GET') {
         try {
             console.log('🧪 Testando conectividade UAZ API...');
-            
+
             // Testar endpoint básico
             const testEndpoints = ['/health', '/status', '/instance/status'];
-            
+
             let testResult = null;
             for (const testEndpoint of testEndpoints) {
                 try {
@@ -146,7 +146,7 @@ const server = http.createServer(async (req, res) => {
                     console.log(`❌ Falhou no endpoint ${testEndpoint}: ${error.message}`);
                 }
             }
-            
+
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 success: !!testResult,
@@ -155,7 +155,7 @@ const server = http.createServer(async (req, res) => {
                 testedEndpoints: testEndpoints,
                 token: `${UAZ_TOKEN.substring(0, 10)}...`
             }));
-            
+
         } catch (error) {
             console.error('❌ Erro no teste UAZ API:', error);
             res.writeHead(500, { 'Content-Type': 'application/json' });
