@@ -30,6 +30,9 @@ const WhatsAppConfig: React.FC = () => {
     const [testPhone, setTestPhone] = useState('');
     const [testMessage, setTestMessage] = useState('');
     const [testLoading, setTestLoading] = useState(false);
+    const [connectPhone, setConnectPhone] = useState('');
+    const [showPhoneInput, setShowPhoneInput] = useState(false);
+    const [pairCode, setPairCode] = useState('');
     
     // Template form states
     const [showTemplateForm, setShowTemplateForm] = useState(false);
@@ -137,12 +140,24 @@ const WhatsAppConfig: React.FC = () => {
     const handleConnect = async () => {
         if (!barbershop?.id) return;
 
+        // Se não tem número, mostrar input
+        if (!connectPhone) {
+            setShowPhoneInput(true);
+            return;
+        }
+
         setLoading(true);
         try {
-            console.log('🚀 Conectando via UAZ API...');
+            console.log('🚀 Conectando via UAZ API com número:', connectPhone);
             
             const response = await fetch(`/api/whatsapp/connect/${barbershop.id}`, {
-                method: 'POST'
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    phone: connectPhone
+                })
             });
 
             const result = await response.json();
@@ -154,14 +169,28 @@ const WhatsAppConfig: React.FC = () => {
                         ...prev!, 
                         status: 'connected', 
                         is_connected: true,
-                        phone_number: result.phoneNumber
+                        phone_number: result.phone
                     }));
-                    updateSessionInDatabase('connected', result.phoneNumber);
+                    updateSessionInDatabase('connected', result.phone);
+                    setShowPhoneInput(false);
                 } else {
-                    // Iniciando conexão - aguardar QR Code
+                    // Iniciando conexão - mostrar QR Code e Pairing Code
                     setSession(prev => ({ ...prev!, status: 'connecting' }));
-                    await checkForQRCode();
+                    
+                    if (result.qrcode) {
+                        setQrCodeImage(result.qrcode);
+                    }
+                    
+                    if (result.paircode) {
+                        setPairCode(result.paircode);
+                    }
+                    
+                    setShowPhoneInput(false);
+                    await checkForConnection();
                 }
+            } else if (result.needsPhone) {
+                setShowPhoneInput(true);
+                alert(result.message || 'Número do telefone é obrigatório');
             } else {
                 console.error('❌ Erro ao conectar:', result.error);
                 alert(`Erro ao conectar: ${result.error}`);
@@ -174,26 +203,17 @@ const WhatsAppConfig: React.FC = () => {
         }
     };
 
-    const checkForQRCode = async () => {
+    const checkForConnection = async () => {
         if (!barbershop?.id) return;
 
         let attempts = 0;
         const maxAttempts = 150; // 5 minutos (2 segundos * 150)
 
-        const checkQR = async () => {
+        const checkStatus = async () => {
             try {
                 attempts++;
                 
-                // Verificar QR Code
-                const qrResponse = await fetch(`/api/whatsapp/qr/${barbershop.id}`);
-                const qrResult = await qrResponse.json();
-                
-                if (qrResult.qr) {
-                    setQrCodeImage(qrResult.qr);
-                    setSession(prev => ({ ...prev!, status: 'connecting' }));
-                }
-
-                // Verificar se conectou
+                // Verificar status da conexão
                 const statusResponse = await fetch(`/api/whatsapp/status/${barbershop.id}`);
                 const statusResult = await statusResponse.json();
                 
@@ -205,27 +225,39 @@ const WhatsAppConfig: React.FC = () => {
                         phone_number: statusResult.phoneNumber
                     }));
                     setQrCodeImage('');
+                    setPairCode('');
                     updateSessionInDatabase('connected', statusResult.phoneNumber);
                     return; // Parar verificação
                 }
 
+                // Atualizar QR Code e Pairing Code se disponíveis
+                if (statusResult.qrcode) {
+                    setQrCodeImage(statusResult.qrcode);
+                }
+                
+                if (statusResult.paircode) {
+                    setPairCode(statusResult.paircode);
+                }
+
                 // Continuar verificando se não atingiu limite
                 if (attempts < maxAttempts) {
-                    setTimeout(checkQR, 2000);
+                    setTimeout(checkStatus, 3000); // 3 segundos
                 } else {
-                    console.log('⏰ Timeout na verificação do QR Code');
+                    console.log('⏰ Timeout na verificação da conexão');
                     setSession(prev => ({ ...prev!, status: 'disconnected' }));
+                    setQrCodeImage('');
+                    setPairCode('');
                 }
                 
             } catch (error) {
-                console.error('❌ Erro ao verificar QR Code:', error);
+                console.error('❌ Erro ao verificar status:', error);
                 if (attempts < maxAttempts) {
-                    setTimeout(checkQR, 2000);
+                    setTimeout(checkStatus, 3000);
                 }
             }
         };
 
-        checkQR();
+        checkStatus();
     };
 
     const handleDisconnect = async () => {
@@ -423,6 +455,40 @@ const WhatsAppConfig: React.FC = () => {
                     </p>
                 )}
 
+                {/* Input do número do telefone */}
+                {showPhoneInput && (
+                    <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <h4 className="text-md font-medium text-gray-900 mb-3">
+                            📱 Informe seu número do WhatsApp
+                        </h4>
+                        <div className="flex space-x-3">
+                            <input
+                                type="text"
+                                value={connectPhone}
+                                onChange={(e) => setConnectPhone(e.target.value)}
+                                placeholder="11999999999"
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            <button
+                                onClick={handleConnect}
+                                disabled={loading || !connectPhone}
+                                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                Conectar
+                            </button>
+                            <button
+                                onClick={() => setShowPhoneInput(false)}
+                                className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                        <p className="text-sm text-gray-600 mt-2">
+                            Digite apenas números com DDD (ex: 11999999999)
+                        </p>
+                    </div>
+                )}
+
                 <div className="flex space-x-3">
                     {!session?.is_connected ? (
                         <button
@@ -458,21 +524,55 @@ const WhatsAppConfig: React.FC = () => {
                     </button>
                 </div>
 
-                {qrCodeImage && (
+                {(qrCodeImage || pairCode) && (
                     <div className="mt-6 p-4 bg-gray-50 rounded-lg">
                         <h4 className="text-md font-medium text-gray-900 mb-3">
-                            📱 Escaneie o QR Code com seu WhatsApp
+                            📱 Conecte seu WhatsApp
                         </h4>
-                        <div className="flex justify-center">
-                            <img 
-                                src={qrCodeImage} 
-                                alt="QR Code WhatsApp UAZ API" 
-                                className="w-64 h-64 border border-gray-300 rounded-lg"
-                            />
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* QR Code */}
+                            {qrCodeImage && (
+                                <div className="text-center">
+                                    <h5 className="font-medium text-gray-800 mb-2">Opção 1: QR Code</h5>
+                                    <img 
+                                        src={qrCodeImage} 
+                                        alt="QR Code WhatsApp UAZ API" 
+                                        className="w-48 h-48 mx-auto border border-gray-300 rounded-lg"
+                                    />
+                                    <p className="text-sm text-gray-600 mt-2">
+                                        WhatsApp → Menu → Dispositivos conectados → Conectar dispositivo
+                                    </p>
+                                </div>
+                            )}
+                            
+                            {/* Pairing Code */}
+                            {pairCode && (
+                                <div className="text-center">
+                                    <h5 className="font-medium text-gray-800 mb-2">Opção 2: Código de Pareamento</h5>
+                                    <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-6">
+                                        <div className="text-3xl font-mono font-bold text-blue-600 mb-2">
+                                            {pairCode}
+                                        </div>
+                                        <button
+                                            onClick={() => navigator.clipboard.writeText(pairCode)}
+                                            className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded"
+                                        >
+                                            📋 Copiar Código
+                                        </button>
+                                    </div>
+                                    <p className="text-sm text-gray-600 mt-2">
+                                        WhatsApp → Menu → Dispositivos conectados → Conectar com código do telefone
+                                    </p>
+                                </div>
+                            )}
                         </div>
-                        <p className="text-sm text-gray-600 mt-3 text-center">
-                            Abra o WhatsApp → Menu → Dispositivos conectados → Conectar dispositivo
-                        </p>
+                        
+                        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                            <p className="text-sm text-blue-800 text-center">
+                                ⏱️ Aguardando conexão... Use qualquer uma das opções acima
+                            </p>
+                        </div>
                     </div>
                 )}
 
