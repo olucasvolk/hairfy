@@ -8,7 +8,7 @@
     "build:full": "chmod +x build.sh && ./build.sh && npm run build",
     "lint": "eslint .",
     "preview": "vite preview --port 4173 --host",
-    "start": "node integrated-evolution-server.js",
+    "start": "node external-evolution-server.js",
     "start:do": "node digitalocean-server.js",
     "whatsapp": "node whatsapp-server.js",
     "dev:whatsapp": "node dev-server.js",
