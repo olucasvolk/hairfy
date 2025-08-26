@@ -64,7 +64,9 @@ const WhatsAppConfig: React.FC = () => {
     const setupSocket = () => {
         if (!barbershop?.id) return;
 
-        const newSocket = io(window.location.origin);
+        // Use localhost:3001 in development, current origin in production
+        const socketUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : window.location.origin;
+        const newSocket = io(socketUrl);
         setSocket(newSocket);
 
         // Escutar eventos do WhatsApp
@@ -109,8 +111,10 @@ const WhatsAppConfig: React.FC = () => {
             if (!barbershop?.id) return;
 
             try {
+                const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
+                
                 // Check QR code
-                const qrResponse = await fetch(`/api/whatsapp/qr/${barbershop.id}`);
+                const qrResponse = await fetch(`${baseUrl}/api/whatsapp/qr/${barbershop.id}`);
                 const qrResult = await qrResponse.json();
                 
                 if (qrResult.qr) {
@@ -119,7 +123,7 @@ const WhatsAppConfig: React.FC = () => {
                 }
 
                 // Check status
-                const statusResponse = await fetch(`/api/whatsapp/status/${barbershop.id}`);
+                const statusResponse = await fetch(`${baseUrl}/api/whatsapp/status/${barbershop.id}`);
                 const statusResult = await statusResponse.json();
                 
                 if (statusResult.connected) {
@@ -208,7 +212,9 @@ const WhatsAppConfig: React.FC = () => {
 
         setLoading(true);
         try {
-            const response = await fetch(`/api/whatsapp/connect/${barbershop.id}`, {
+            // Use localhost:3001 in development
+            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
+            const response = await fetch(`${baseUrl}/api/whatsapp/connect/${barbershop.id}`, {
                 method: 'POST'
             });
 
@@ -217,7 +223,7 @@ const WhatsAppConfig: React.FC = () => {
             if (result.success) {
                 if (result.message === 'Already connected') {
                     // Verificar status real
-                    const statusResponse = await fetch(`/api/whatsapp/status/${barbershop.id}`);
+                    const statusResponse = await fetch(`${baseUrl}/api/whatsapp/status/${barbershop.id}`);
                     const statusResult = await statusResponse.json();
                     
                     if (statusResult.connected) {
@@ -253,7 +259,8 @@ const WhatsAppConfig: React.FC = () => {
 
         setLoading(true);
         try {
-            const response = await fetch(`/api/whatsapp/disconnect/${barbershop.id}`, {
+            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
+            const response = await fetch(`${baseUrl}/api/whatsapp/disconnect/${barbershop.id}`, {
                 method: 'POST'
             });
 
@@ -276,7 +283,8 @@ const WhatsAppConfig: React.FC = () => {
 
         setTestLoading(true);
         try {
-            const response = await fetch(`/api/whatsapp/send/${barbershop.id}`, {
+            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
+            const response = await fetch(`${baseUrl}/api/whatsapp/send/${barbershop.id}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'

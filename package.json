@@ -9,6 +9,8 @@
     "preview": "vite preview --port 4173 --host",
     "start": "node digitalocean-server.js",
     "whatsapp": "node whatsapp-server.js",
+    "dev:whatsapp": "node dev-server.js",
+    "dev:full": "concurrently \"npm run dev:whatsapp\" \"npm run dev\"",
     "start:full": "concurrently \"npm run whatsapp\" \"npm run dev\""
   },
   "dependencies": {
