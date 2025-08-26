@@ -64,10 +64,29 @@ const WhatsAppConfig: React.FC = () => {
     const setupSocket = () => {
         if (!barbershop?.id) return;
 
-        // Use localhost:3001 in development, current origin in production
-        const socketUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : window.location.origin;
-        const newSocket = io(socketUrl);
-        setSocket(newSocket);
+        try {
+            // Use localhost:3001 in development, current origin in production
+            const socketUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : window.location.origin;
+            const newSocket = io(socketUrl, {
+                transports: ['polling', 'websocket'],
+                timeout: 20000,
+                forceNew: true
+            });
+            
+            newSocket.on('connect', () => {
+                console.log('✅ Socket.IO conectado');
+            });
+
+            newSocket.on('connect_error', (error) => {
+                console.warn('⚠️ Socket.IO erro de conexão:', error);
+                // Continue usando polling HTTP como fallback
+            });
+
+            newSocket.on('disconnect', (reason) => {
+                console.log('🔌 Socket.IO desconectado:', reason);
+            });
+
+            setSocket(newSocket);
 
         // Escutar eventos do WhatsApp
         newSocket.on(`qr_${barbershop.id}`, (data) => {
@@ -95,11 +114,15 @@ const WhatsAppConfig: React.FC = () => {
             console.error('Falha na autenticação:', data.error);
         });
 
-        newSocket.on(`disconnected_${barbershop.id}`, () => {
-            setSession(prev => ({ ...prev!, status: 'disconnected', is_connected: false }));
-            setQrCodeImage('');
-            updateSessionInDatabase('disconnected');
-        });
+            newSocket.on(`disconnected_${barbershop.id}`, () => {
+                setSession(prev => ({ ...prev!, status: 'disconnected', is_connected: false }));
+                setQrCodeImage('');
+                updateSessionInDatabase('disconnected');
+            });
+        } catch (error) {
+            console.error('❌ Erro ao configurar Socket.IO:', error);
+            // Continue sem Socket.IO, usando apenas polling HTTP
+        }
     };
 
     const startQRPolling = () => {
@@ -156,15 +179,52 @@ const WhatsAppConfig: React.FC = () => {
         if (!barbershop?.id) return;
 
         try {
-            // Buscar sessão do WhatsApp
+            // Verificar status real do servidor primeiro
+            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
+            const statusResponse = await fetch(`${baseUrl}/api/whatsapp/status/${barbershop.id}`);
+            const serverStatus = await statusResponse.json();
+            
+            console.log('Status do servidor:', serverStatus);
+
+            // Buscar sessão do WhatsApp do banco
             const { data: sessionData } = await supabase
                 .from('whatsapp_sessions')
                 .select('*')
                 .eq('barbershop_id', barbershop.id)
                 .single();
 
+            console.log('Dados do banco:', sessionData);
+
+            // Usar status do servidor como verdade absoluta
             if (sessionData) {
-                setSession(sessionData);
+                const realSession = {
+                    ...sessionData,
+                    is_connected: serverStatus.connected,
+                    status: serverStatus.connected ? 'connected' : 'disconnected',
+                    phone_number: serverStatus.phone ? `+${serverStatus.phone}` : sessionData.phone_number
+                };
+                
+                console.log('Session final:', realSession);
+                setSession(realSession);
+
+                // Atualizar banco se houver diferença
+                if (sessionData.is_connected !== serverStatus.connected) {
+                    console.log('Sincronizando banco com servidor...');
+                    await updateSessionInDatabase(
+                        serverStatus.connected ? 'connected' : 'disconnected',
+                        serverStatus.phone ? `+${serverStatus.phone}` : undefined
+                    );
+                }
+            } else if (serverStatus.connected) {
+                // Servidor conectado mas sem dados no banco - criar entrada
+                const newSession = {
+                    barbershop_id: barbershop.id,
+                    is_connected: true,
+                    status: 'connected',
+                    phone_number: serverStatus.phone ? `+${serverStatus.phone}` : null
+                };
+                setSession(newSession);
+                await updateSessionInDatabase('connected', serverStatus.phone ? `+${serverStatus.phone}` : undefined);
             }
 
             // Buscar templates
@@ -532,6 +592,12 @@ const WhatsAppConfig: React.FC = () => {
                             className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded"
                         >
                             Log Console
+                        </button>
+                        <button
+                            onClick={fetchWhatsAppData}
+                            className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded"
+                        >
+                            Sincronizar
                         </button>
                     </div>
                 </div>

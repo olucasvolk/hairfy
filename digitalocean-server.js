@@ -72,10 +72,13 @@ const server = http.createServer((req, res) => {
 const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
+    methods: ["GET", "POST"],
+    credentials: false
   },
-  transports: ['websocket', 'polling'],
-  allowEIO3: true
+  transports: ['polling', 'websocket'],
+  allowEIO3: true,
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 // WhatsApp API handler
@@ -169,13 +172,13 @@ function handleWhatsAppAPI(req, res, pathname, method) {
 async function connectWhatsApp(barbershopId, res) {
   try {
     console.log(`🔄 [${new Date().toISOString()}] Tentativa de conexão para: ${barbershopId}`);
-    
+
     if (whatsappClients.has(barbershopId)) {
       const client = whatsappClients.get(barbershopId);
       const isReady = client && client.info;
-      
+
       console.log(`⚠️ [${barbershopId}] Cliente já existe. Status: ${isReady ? 'READY' : 'NOT_READY'}`);
-      
+
       if (!isReady) {
         console.log(`🔄 [${barbershopId}] Cliente existe mas não está pronto. Removendo e reconectando...`);
         try {
@@ -195,7 +198,7 @@ async function connectWhatsApp(barbershopId, res) {
     }
 
     console.log(`🚀 [${barbershopId}] Criando novo cliente WhatsApp...`);
-    
+
     const client = new Client({
       authStrategy: new LocalAuth({
         clientId: barbershopId,
@@ -264,10 +267,10 @@ async function connectWhatsApp(barbershopId, res) {
 
     whatsappClients.set(barbershopId, client);
     console.log(`💾 [${barbershopId}] Cliente armazenado no Map`);
-    
+
     console.log(`🔄 [${barbershopId}] Iniciando cliente...`);
     await client.initialize();
-    
+
     console.log(`✅ [${barbershopId}] Cliente inicializado com sucesso`);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -355,7 +358,7 @@ function getQRCode(barbershopId, res) {
 async function resetWhatsApp(barbershopId, res) {
   try {
     console.log(`🔄 [${barbershopId}] RESET solicitado`);
-    
+
     // Remove client if exists
     const client = whatsappClients.get(barbershopId);
     if (client) {
@@ -367,12 +370,12 @@ async function resetWhatsApp(barbershopId, res) {
       }
       whatsappClients.delete(barbershopId);
     }
-    
+
     // Remove QR code
     qrCodes.delete(barbershopId);
-    
+
     console.log(`✅ [${barbershopId}] Reset concluído`);
-    
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, message: 'Reset completed' }));
   } catch (error) {
@@ -439,11 +442,19 @@ function serveStaticFile(req, res, pathname) {
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log('Cliente conectado:', socket.id);
+  console.log(`🔌 [${new Date().toISOString()}] Cliente conectado:`, socket.id);
 
-  socket.on('disconnect', () => {
-    console.log('Cliente desconectado:', socket.id);
+  socket.on('disconnect', (reason) => {
+    console.log(`🔌 [${new Date().toISOString()}] Cliente desconectado:`, socket.id, 'Razão:', reason);
   });
+
+  socket.on('error', (error) => {
+    console.error(`❌ [${new Date().toISOString()}] Erro no socket:`, socket.id, error);
+  });
+});
+
+io.on('error', (error) => {
+  console.error(`❌ [${new Date().toISOString()}] Erro no Socket.IO:`, error);
 });
 
 // Start server
