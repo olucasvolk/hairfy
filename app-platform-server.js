@@ -175,8 +175,8 @@ async function processReminders() {
   }
 }
 
-// Rota raiz
-app.get('/', (req, res) => {
+// Rota da API (apenas para /api)
+app.get('/api', (req, res) => {
   res.json({
     service: 'Hairfy WhatsApp Reminders API',
     version: '1.0.0',
@@ -192,6 +192,16 @@ app.get('/', (req, res) => {
 });
 
 // Health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'hairfy-whatsapp-reminders-api',
+    reminders: 'active',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Manter /health para compatibilidade
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -235,21 +245,21 @@ app.post('/api/whatsapp/test', async (req, res) => {
   }
 });
 
-// Servir React app para rotas não-API
+// Servir React app para todas as rotas não-API
 app.get('*', (req, res) => {
   // Se for uma rota de API, retornar 404 JSON
-  if (req.path.startsWith('/api/')) {
+  if (req.path.startsWith('/api/') && req.path !== '/api') {
     return res.status(404).json({
       error: 'Endpoint da API não encontrado',
       availableEndpoints: {
-        health: 'GET /health',
+        health: 'GET /api/health',
         processReminders: 'POST /api/reminders/process',
         testWhatsApp: 'POST /api/whatsapp/test'
       }
     });
   }
 
-  // Para outras rotas, tentar servir o React app
+  // Para TODAS as outras rotas (incluindo /), servir o React app
   const indexPath = path.join(__dirname, 'dist', 'index.html');
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
@@ -266,7 +276,7 @@ app.get('*', (req, res) => {
           <h2>📡 API Ativa</h2>
           <p>A API de lembretes está funcionando:</p>
           <ul style="text-align: left; display: inline-block;">
-            <li><a href="/health">GET /health</a> - Status da API</li>
+            <li><a href="/api/health">GET /api/health</a> - Status da API</li>
             <li>POST /api/reminders/process - Processar lembretes</li>
             <li>POST /api/whatsapp/test - Testar WhatsApp</li>
           </ul>
