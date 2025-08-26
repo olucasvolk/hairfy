@@ -1,7 +1,4 @@
 const express = require('express');
-const http = require('http');
-const path = require('path');
-const fs = require('fs');
 const cors = require('cors');
 const axios = require('axios');
 const cron = require('node-cron');
@@ -13,21 +10,11 @@ const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const app = express();
-const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// Servir arquivos estáticos do React (se existir build)
-const distPath = path.join(__dirname, 'dist');
-if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
-  console.log('✅ Servindo frontend React do diretório dist/');
-} else {
-  console.log('⚠️ Diretório dist/ não encontrado - apenas API ativa');
-}
 
 // Função para enviar mensagem via WhatsApp API
 async function sendWhatsAppMessage(phone, message, instanceId = 'default') {
@@ -237,44 +224,22 @@ app.post('/api/whatsapp/test', async (req, res) => {
   }
 });
 
-// Servir React app para rotas não-API
+// 404 para outras rotas
 app.get('*', (req, res) => {
-  // Se for uma rota de API, retornar 404 JSON
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({
-      error: 'Endpoint da API não encontrado',
-      availableEndpoints: {
-        health: 'GET /health',
-        processReminders: 'POST /api/reminders/process',
-        testWhatsApp: 'POST /api/whatsapp/test'
-      }
-    });
-  }
-
-  // Para outras rotas, tentar servir o React app
-  const indexPath = path.join(__dirname, 'dist', 'index.html');
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    // Se não houver build do React, mostrar informações da API
-    res.json({
-      service: 'Hairfy WhatsApp Reminders API',
-      version: '1.0.0',
-      status: 'active',
-      message: 'Frontend não disponível - Execute npm run build para gerar o frontend',
-      description: 'API para envio automático de lembretes via WhatsApp Business API',
-      endpoints: {
-        health: 'GET /health',
-        processReminders: 'POST /api/reminders/process',
-        testWhatsApp: 'POST /api/whatsapp/test'
-      },
-      timestamp: new Date().toISOString()
-    });
-  }
+  res.status(404).json({
+    error: 'Endpoint não encontrado',
+    service: 'Hairfy WhatsApp Reminders API',
+    availableEndpoints: {
+      root: 'GET /',
+      health: 'GET /health',
+      processReminders: 'POST /api/reminders/process',
+      testWhatsApp: 'POST /api/whatsapp/test'
+    }
+  });
 });
 
 // Iniciar servidor
-server.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`🚀 Servidor de Lembretes WhatsApp API rodando na porta ${PORT}`);
   console.log(`📱 Sistema otimizado para WhatsApp Business API`);
   

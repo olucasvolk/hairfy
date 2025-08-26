@@ -6,35 +6,14 @@
     "node": "18.x"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview --port 4173 --host",
-    "start": "node app-platform-server.js",
-    "postinstall": "npm run build"
+    "start": "node app-platform-server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",
-    "@vitejs/plugin-react": "^4.5.0",
     "axios": "^1.9.0",
     "cors": "^2.8.5",
-    "date-fns": "^4.1.0",
     "express": "^4.21.2",
-    "framer-motion": "^11.11.17",
-    "lucide-react": "^0.511.0",
-    "node-cron": "^3.0.3",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "react-router-dom": "^6.28.0",
-    "recharts": "^2.12.7",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5.8.3",
-    "vite": "^6.3.5"
+    "node-cron": "^3.0.3"
   },
-  "devDependencies": {
-    "@types/react": "^19.1.5",
-    "@types/react-dom": "^19.1.5",
-    "autoprefixer": "^10.4.21",
-    "postcss": "^8.4.35"
-  }
+  "devDependencies": {}
 }
