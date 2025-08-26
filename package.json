@@ -36,7 +36,8 @@
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "whatsapp-web.js": "^1.32.0",
-    "puppeteer": "^21.11.0"
+    "puppeteer-core": "^21.11.0",
+    "@sparticuz/chromium": "^121.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.27.0",
