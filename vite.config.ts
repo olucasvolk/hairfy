@@ -8,7 +8,21 @@ export default defineConfig({
     exclude: ['lucide-react'],
   },
   
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          router: ['react-router-dom'],
+        }
+      }
+    }
+  },
+  
   server: {
+    hmr: {
+      overlay: false
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

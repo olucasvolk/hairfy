@@ -24,10 +24,12 @@ import WhatsAppTest from './pages/WhatsAppTest';
 import WhatsAppReminders from './pages/WhatsAppReminders';
 
 
+
 function App() {
   return (
     <Router>
       <div className="min-h-screen bg-gray-50 font-sans">
+
         <Navbar />
         <Routes>
           <Route path="/" element={<Home />} />

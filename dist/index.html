@@ -40,10 +40,85 @@
     }
     </script>
 
-    <script type="module" crossorigin src="/assets/index-BoFnm5yE.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CcSk6b9K.css">
+    <script type="module" crossorigin src="/assets/index-DTYa2hMq.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-wzZzN_Jv.js">
+    <link rel="modulepreload" crossorigin href="/assets/router-DdXPx30u.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-N6FYYGHI.css">
   </head>
   <body>
     <div id="root"></div>
+    
+    <!-- PREVENÇÃO DE REFRESH AUTOMÁTICO -->
+    <script>
+      // Variáveis de controle
+      let pageWasHidden = false;
+      let lastHiddenTime = 0;
+      let preventRefresh = false;
+      
+      // Detectar quando página fica oculta (troca aba/minimiza)
+      document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+          pageWasHidden = true;
+          lastHiddenTime = Date.now();
+          preventRefresh = true;
+          console.log('🔒 Página oculta - prevenção ativada');
+        } else {
+          console.log('👁️ Página visível - aguardando estabilização');
+          // Aguardar um pouco antes de desativar prevenção
+          setTimeout(function() {
+            preventRefresh = false;
+            pageWasHidden = false;
+          }, 2000);
+        }
+      });
+      
+      // Interceptar beforeunload para prevenir refresh
+      window.addEventListener('beforeunload', function(e) {
+        const timeSinceHidden = Date.now() - lastHiddenTime;
+        
+        if (preventRefresh || timeSinceHidden < 3000) {
+          console.log('🚫 Prevenindo refresh automático');
+          e.preventDefault();
+          e.returnValue = '';
+          return '';
+        }
+      });
+      
+      // Prevenir teclas de refresh
+      document.addEventListener('keydown', function(e) {
+        if (preventRefresh && (e.key === 'F5' || (e.ctrlKey && e.key === 'r'))) {
+          console.log('🚫 Prevenindo refresh por tecla');
+          e.preventDefault();
+          return false;
+        }
+      });
+      
+      // Controlar foco da janela
+      window.addEventListener('focus', function() {
+        console.log('🎯 Janela ganhou foco');
+      });
+      
+      window.addEventListener('blur', function() {
+        console.log('😴 Janela perdeu foco');
+        pageWasHidden = true;
+        lastHiddenTime = Date.now();
+        preventRefresh = true;
+      });
+      
+      // Service Worker para cache
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js')
+            .then(function(registration) {
+              console.log('✅ Service Worker registrado');
+            })
+            .catch(function(error) {
+              console.log('❌ Erro ao registrar Service Worker:', error);
+            });
+        });
+      }
+      
+      console.log('🛡️ Sistema de prevenção de refresh carregado');
+    </script>
   </body>
 </html>

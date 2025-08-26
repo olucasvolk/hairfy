@@ -180,9 +180,29 @@ export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   }, [user]);
 
+  // Evitar refetch desnecessário quando a aba volta ao foco
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    let mounted = true;
+    
+    const handleVisibilityChange = () => {
+      // NÃO refazer fetch quando a página volta a ficar visível
+      if (!document.hidden && mounted) {
+        console.log('Página visível - mantendo dados em cache');
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Fazer fetch apenas na primeira montagem
+    if (mounted) {
+      fetchData();
+    }
+    
+    return () => {
+      mounted = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user]); // Apenas quando user muda, não fetchData
 
   const value = {
     barbershop,
