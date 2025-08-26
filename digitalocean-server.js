@@ -67,7 +67,7 @@ const io = new Server(server, {
 // WhatsApp API handler
 function handleWhatsAppAPI(req, res, pathname, method) {
   const pathParts = pathname.split('/');
-  console.log(`WhatsApp API: ${method} ${pathname} - Parts:`, pathParts);
+  console.log(`🔧 WhatsApp API: ${method} ${pathname}`);
 
   if (method === 'POST' && pathParts[3] === 'connect') {
     const barbershopId = pathParts[4];
@@ -143,7 +143,10 @@ function handleWhatsAppAPI(req, res, pathname, method) {
 // WhatsApp functions
 async function connectWhatsApp(barbershopId, res) {
   try {
+    console.log(`🔄 Conectando WhatsApp para barbearia: ${barbershopId}`);
+    
     if (whatsappClients.has(barbershopId)) {
+      console.log(`✅ WhatsApp já conectado para ${barbershopId}`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, message: 'Already connected' }));
       return;
@@ -170,7 +173,7 @@ async function connectWhatsApp(barbershopId, res) {
     });
 
     client.on('qr', async (qr) => {
-      console.log(`QR Code gerado para ${barbershopId}`);
+      console.log(`📱 QR Code gerado para ${barbershopId}`);
 
       // Gerar QR code como imagem
       try {
@@ -180,14 +183,14 @@ async function connectWhatsApp(barbershopId, res) {
         // Emit via Socket.IO
         io.emit(`qr_${barbershopId}`, { qr: qrImage });
 
-        console.log(`QR Code armazenado para ${barbershopId}`);
+        console.log(`💾 QR Code armazenado para ${barbershopId}`);
       } catch (error) {
-        console.error('Erro ao gerar QR code:', error);
+        console.error('❌ Erro ao gerar QR code:', error);
       }
     });
 
     client.on('ready', () => {
-      console.log(`WhatsApp conectado para ${barbershopId}`);
+      console.log(`✅ WhatsApp conectado para ${barbershopId}`);
       const phoneNumber = client.info.wid.user;
 
       // Remove QR code when connected
@@ -276,6 +279,8 @@ async function sendWhatsAppMessage(barbershopId, data, res) {
 function getWhatsAppStatus(barbershopId, res) {
   const client = whatsappClients.get(barbershopId);
   const isConnected = client && client.info;
+  
+  console.log(`📊 Status para ${barbershopId}: ${isConnected ? 'conectado' : 'desconectado'}`);
 
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
@@ -286,6 +291,8 @@ function getWhatsAppStatus(barbershopId, res) {
 
 function getQRCode(barbershopId, res) {
   const qrImage = qrCodes.get(barbershopId);
+  
+  console.log(`📱 QR Code para ${barbershopId}: ${qrImage ? 'disponível' : 'não encontrado'}`);
 
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
