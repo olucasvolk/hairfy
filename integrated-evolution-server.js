@@ -256,6 +256,14 @@ const server = http.createServer(async (req, res) => {
                     console.log('📱 QR Code gerado para:', barbershopId);
                     qrCodes.set(barbershopId, qr);
 
+                    // QR Code expira em 60 segundos
+                    setTimeout(() => {
+                        if (qrCodes.has(barbershopId)) {
+                            console.log('⏰ QR Code expirado para:', barbershopId);
+                            qrCodes.delete(barbershopId);
+                        }
+                    }, 60000);
+
                     if (io) {
                         io.emit('qr', { barbershopId, qr });
                     }
@@ -272,18 +280,7 @@ const server = http.createServer(async (req, res) => {
                         io.emit('disconnected', { barbershopId, reason: lastDisconnect?.error?.message });
                     }
 
-                    // Auto-reconectar se necessário
-                    if (shouldReconnect) {
-                        setTimeout(async () => {
-                            try {
-                                console.log(`🔄 Reconectando ${barbershopId}...`);
-                                const newSocket = await createWhatsAppConnection(barbershopId);
-                                whatsappSockets.set(barbershopId, newSocket);
-                            } catch (error) {
-                                console.error(`❌ Erro ao reconectar ${barbershopId}:`, error);
-                            }
-                        }, 5000);
-                    }
+                    // NÃO auto-reconectar - deixar usuário decidir
                 } else if (connection === 'open') {
                     console.log(`✅ WhatsApp conectado para: ${barbershopId}`);
                     qrCodes.delete(barbershopId);
@@ -421,32 +418,54 @@ const server = http.createServer(async (req, res) => {
         const barbershopId = pathname.split('/').pop();
         const socket = whatsappSockets.get(barbershopId);
 
+        console.log(`🔌 Desconectando WhatsApp para: ${barbershopId}`);
+
         if (socket) {
             try {
-                socket.end();
-                whatsappSockets.delete(barbershopId);
-                qrCodes.delete(barbershopId);
-
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({
-                    success: true,
-                    message: 'WhatsApp desconectado',
-                    instanceName: barbershopId
-                }));
+                // Fazer logout primeiro para limpar sessão no WhatsApp
+                await socket.logout();
+                console.log(`📱 Logout realizado para: ${barbershopId}`);
             } catch (error) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({
-                    success: false,
-                    error: error.message
-                }));
+                console.log('Erro no logout:', error.message);
             }
-        } else {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                success: true,
-                message: 'WhatsApp já estava desconectado'
-            }));
+
+            try {
+                // Fechar conexão
+                socket.end();
+                console.log(`🔌 Socket fechado para: ${barbershopId}`);
+            } catch (error) {
+                console.log('Erro ao fechar socket:', error.message);
+            }
         }
+
+        // Limpar tudo da memória
+        whatsappSockets.delete(barbershopId);
+        qrCodes.delete(barbershopId);
+        authStates.delete(barbershopId);
+
+        // Limpar arquivos de autenticação
+        const authDir = path.join(__dirname, 'evolution_auth', barbershopId);
+        if (fs.existsSync(authDir)) {
+            try {
+                fs.rmSync(authDir, { recursive: true, force: true });
+                console.log(`🗑️ Arquivos de auth removidos para: ${barbershopId}`);
+            } catch (error) {
+                console.log('Erro ao remover auth:', error.message);
+            }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            success: true,
+            message: 'WhatsApp desconectado e sessão limpa completamente',
+            instanceName: barbershopId,
+            cleaned: {
+                socket: true,
+                qrCode: true,
+                authState: true,
+                authFiles: fs.existsSync(authDir) ? false : true
+            }
+        }));
         return;
     }
 
