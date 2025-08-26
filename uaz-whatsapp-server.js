@@ -382,17 +382,53 @@ const server = http.createServer(async (req, res) => {
                 
                 console.log('📱 Resposta completa da UAZ API:', JSON.stringify(connectResult, null, 2));
                 
-                // Extrair dados da resposta
-                const isConnected = connectResult.connected || false;
-                const qrcode = connectResult.instance?.qrcode || connectResult.qrcode || null;
-                const paircode = connectResult.instance?.paircode || connectResult.paircode || null;
+                // Fazer uma verificação adicional do status real da instância
+                let statusCheck = null;
+                try {
+                    console.log('🔍 Verificando status real da instância...');
+                    statusCheck = await callUazAPI('/instance/status', 'GET', null, false, instanceToken);
+                    console.log('📊 Status real da instância:', JSON.stringify(statusCheck, null, 2));
+                } catch (statusError) {
+                    console.log('⚠️ Erro ao verificar status:', statusError.message);
+                }
                 
-                // Determinar status real
+                // Extrair dados da resposta (priorizar statusCheck se disponível)
+                const responseToUse = statusCheck || connectResult;
+                
+                const qrcode = responseToUse.instance?.qrcode || responseToUse.qrcode || 
+                              connectResult.instance?.qrcode || connectResult.qrcode || null;
+                const paircode = responseToUse.instance?.paircode || responseToUse.paircode || 
+                                connectResult.instance?.paircode || connectResult.paircode || null;
+                const instanceStatus_uaz = responseToUse.instance?.status || responseToUse.status || 'connecting';
+                const loggedIn = responseToUse.loggedIn || connectResult.loggedIn || false;
+                
+                // Determinar status real - ser mais rigoroso
+                let isConnected = false;
                 let realStatus = 'connecting';
-                if (isConnected) {
-                    realStatus = 'connected';
-                } else if (qrcode || paircode) {
+                
+                console.log('🔍 Análise do status:', {
+                    hasQR: !!qrcode,
+                    hasPairCode: !!paircode,
+                    instanceStatus: instanceStatus_uaz,
+                    loggedIn: loggedIn,
+                    connected: responseToUse.connected
+                });
+                
+                if (qrcode || paircode) {
+                    // Tem QR ou Pairing Code = definitivamente aguardando scan
+                    isConnected = false;
                     realStatus = 'waiting_scan';
+                    console.log('📱 Status: Aguardando scan (tem QR/Pairing Code)');
+                } else if (instanceStatus_uaz === 'connected' && loggedIn === true) {
+                    // Só considera conectado se status=connected E loggedIn=true
+                    isConnected = true;
+                    realStatus = 'connected';
+                    console.log('✅ Status: Realmente conectado');
+                } else {
+                    // Qualquer outro caso = ainda conectando
+                    isConnected = false;
+                    realStatus = 'connecting';
+                    console.log('🔄 Status: Ainda conectando');
                 }
                 
                 instanceStatus.set(barbershopId, {
