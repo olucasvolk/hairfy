@@ -33,7 +33,7 @@ const WhatsAppConfig: React.FC = () => {
     const [connectPhone, setConnectPhone] = useState('');
     const [showPhoneInput, setShowPhoneInput] = useState(false);
     const [pairCode, setPairCode] = useState('');
-    
+
     // Template form states
     const [showTemplateForm, setShowTemplateForm] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState<WhatsAppTemplate | null>(null);
@@ -57,7 +57,7 @@ const WhatsAppConfig: React.FC = () => {
             // Verificar status real via UAZ API
             const statusResponse = await fetch(`/api/whatsapp/status/${barbershop.id}`);
             const serverStatus = await statusResponse.json();
-            
+
             console.log('📱 Status UAZ API:', serverStatus);
 
             // Buscar sessão do banco
@@ -75,7 +75,7 @@ const WhatsAppConfig: React.FC = () => {
                     status: serverStatus.connected ? 'connected' : 'disconnected',
                     phone_number: serverStatus.phoneNumber || sessionData.phone_number
                 };
-                
+
                 setSession(realSession);
 
                 // Sincronizar banco com UAZ API se necessário
@@ -149,7 +149,7 @@ const WhatsAppConfig: React.FC = () => {
         setLoading(true);
         try {
             console.log('🚀 Conectando via UAZ API com número:', connectPhone);
-            
+
             const response = await fetch(`/api/whatsapp/connect/${barbershop.id}`, {
                 method: 'POST',
                 headers: {
@@ -161,13 +161,13 @@ const WhatsAppConfig: React.FC = () => {
             });
 
             const result = await response.json();
-            
+
             if (result.success) {
                 if (result.connected) {
                     // Já conectado
-                    setSession(prev => ({ 
-                        ...prev!, 
-                        status: 'connected', 
+                    setSession(prev => ({
+                        ...prev!,
+                        status: 'connected',
                         is_connected: true,
                         phone_number: result.phone
                     }));
@@ -176,15 +176,15 @@ const WhatsAppConfig: React.FC = () => {
                 } else {
                     // Iniciando conexão - mostrar QR Code e Pairing Code
                     setSession(prev => ({ ...prev!, status: 'connecting' }));
-                    
+
                     if (result.qrcode) {
                         setQrCodeImage(result.qrcode);
                     }
-                    
+
                     if (result.paircode) {
                         setPairCode(result.paircode);
                     }
-                    
+
                     setShowPhoneInput(false);
                     await checkForConnection();
                 }
@@ -212,11 +212,11 @@ const WhatsAppConfig: React.FC = () => {
         const checkStatus = async () => {
             try {
                 attempts++;
-                
+
                 // Verificar status da conexão
                 const statusResponse = await fetch(`/api/whatsapp/status/${barbershop.id}`);
                 const statusResult = await statusResponse.json();
-                
+
                 if (statusResult.connected) {
                     setSession(prev => ({
                         ...prev!,
@@ -234,7 +234,7 @@ const WhatsAppConfig: React.FC = () => {
                 if (statusResult.qrcode) {
                     setQrCodeImage(statusResult.qrcode);
                 }
-                
+
                 if (statusResult.paircode) {
                     setPairCode(statusResult.paircode);
                 }
@@ -248,7 +248,7 @@ const WhatsAppConfig: React.FC = () => {
                     setQrCodeImage('');
                     setPairCode('');
                 }
-                
+
             } catch (error) {
                 console.error('❌ Erro ao verificar status:', error);
                 if (attempts < maxAttempts) {
@@ -266,13 +266,13 @@ const WhatsAppConfig: React.FC = () => {
         setLoading(true);
         try {
             console.log('🔌 Desconectando via UAZ API...');
-            
+
             const response = await fetch(`/api/whatsapp/disconnect/${barbershop.id}`, {
                 method: 'POST'
             });
 
             const result = await response.json();
-            
+
             if (result.success) {
                 setSession(prev => prev ? { ...prev, is_connected: false, status: 'disconnected' } : null);
                 setQrCodeImage('');
@@ -297,13 +297,13 @@ const WhatsAppConfig: React.FC = () => {
         setLoading(true);
         try {
             console.log('🔄 Resetando via UAZ API...');
-            
+
             const response = await fetch(`/api/whatsapp/reset/${barbershop.id}`, {
                 method: 'POST'
             });
 
             const result = await response.json();
-            
+
             if (result.success) {
                 setSession(prev => prev ? { ...prev, is_connected: false, status: 'disconnected' } : null);
                 setQrCodeImage('');
@@ -326,7 +326,7 @@ const WhatsAppConfig: React.FC = () => {
         setTestLoading(true);
         try {
             console.log('📤 Enviando mensagem teste via UAZ API...');
-            
+
             const response = await fetch(`/api/whatsapp/send/${barbershop.id}`, {
                 method: 'POST',
                 headers: {
@@ -339,7 +339,7 @@ const WhatsAppConfig: React.FC = () => {
             });
 
             const result = await response.json();
-            
+
             if (result.success) {
                 alert('Mensagem enviada com sucesso via UAZ API!');
                 setTestPhone('');
@@ -433,18 +433,16 @@ const WhatsAppConfig: React.FC = () => {
             <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
-                        <div className={`w-3 h-3 rounded-full ${
-                            session?.is_connected ? 'bg-green-500' : 'bg-red-500'
-                        }`} />
+                        <div className={`w-3 h-3 rounded-full ${session?.is_connected ? 'bg-green-500' : 'bg-red-500'
+                            }`} />
                         <h3 className="text-lg font-semibold text-gray-900">
                             Status da Conexão UAZ API
                         </h3>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        session?.is_connected 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                    }`}>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${session?.is_connected
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                        }`}>
                         {session?.is_connected ? 'Conectado' : 'Desconectado'}
                     </span>
                 </div>
@@ -513,7 +511,7 @@ const WhatsAppConfig: React.FC = () => {
                             <span>Desconectar</span>
                         </button>
                     )}
-                    
+
                     <button
                         onClick={handleReset}
                         disabled={loading}
@@ -529,15 +527,15 @@ const WhatsAppConfig: React.FC = () => {
                         <h4 className="text-md font-medium text-gray-900 mb-3">
                             📱 Conecte seu WhatsApp
                         </h4>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* QR Code */}
                             {qrCodeImage && (
                                 <div className="text-center">
                                     <h5 className="font-medium text-gray-800 mb-2">Opção 1: QR Code</h5>
-                                    <img 
-                                        src={qrCodeImage} 
-                                        alt="QR Code WhatsApp UAZ API" 
+                                    <img
+                                        src={qrCodeImage}
+                                        alt="QR Code WhatsApp UAZ API"
                                         className="w-48 h-48 mx-auto border border-gray-300 rounded-lg"
                                     />
                                     <p className="text-sm text-gray-600 mt-2">
@@ -545,7 +543,7 @@ const WhatsAppConfig: React.FC = () => {
                                     </p>
                                 </div>
                             )}
-                            
+
                             {/* Pairing Code */}
                             {pairCode && (
                                 <div className="text-center">
@@ -567,7 +565,7 @@ const WhatsAppConfig: React.FC = () => {
                                 </div>
                             )}
                         </div>
-                        
+
                         <div className="mt-4 p-3 bg-blue-50 rounded-lg">
                             <p className="text-sm text-blue-800 text-center">
                                 ⏱️ Aguardando conexão... Use qualquer uma das opções acima
@@ -615,7 +613,7 @@ const WhatsAppConfig: React.FC = () => {
                                     console.log('🧪 Testando UAZ API...');
                                     const response = await fetch('/api/test-uaz');
                                     const data = await response.json();
-                                    
+
                                     if (data.success) {
                                         alert(`✅ UAZ API funcionando!\n\n${JSON.stringify(data, null, 2)}`);
                                     } else {
@@ -641,7 +639,7 @@ const WhatsAppConfig: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">
                     Teste de Mensagem UAZ API
                 </h3>
-                
+
                 {!session?.is_connected && (
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                         <p className="text-yellow-800">
@@ -715,7 +713,7 @@ const WhatsAppConfig: React.FC = () => {
                     <h4 className="text-md font-medium text-gray-900 mb-4">
                         {editingTemplate ? 'Editar Template' : 'Novo Template'}
                     </h4>
-                    
+
                     <div className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -757,7 +755,7 @@ const WhatsAppConfig: React.FC = () => {
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                             <p className="text-sm text-gray-500 mt-1">
-                                Use variáveis: {{client_name}}, {{service_name}}, {{appointment_date}}, {{appointment_time}}, {{barbershop_name}}
+                                Use variáveis: {{ client_name }}, {{ service_name }}, {{ appointment_date }}, {{ appointment_time }}, {{ barbershop_name }}
                             </p>
                         </div>
 
@@ -825,11 +823,10 @@ const WhatsAppConfig: React.FC = () => {
                             </div>
                         </div>
                         <p className="text-sm text-gray-600 mb-2">{template.message_template}</p>
-                        <span className={`inline-block px-2 py-1 text-xs rounded-full ${
-                            template.is_active 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-gray-100 text-gray-800'
-                        }`}>
+                        <span className={`inline-block px-2 py-1 text-xs rounded-full ${template.is_active
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                            }`}>
                             {template.is_active ? 'Ativo' : 'Inativo'}
                         </span>
                     </div>
@@ -860,11 +857,10 @@ const WhatsAppConfig: React.FC = () => {
                             <button
                                 key={id}
                                 onClick={() => setActiveTab(id as any)}
-                                className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${
-                                    activeTab === id
-                                        ? 'border-blue-500 text-blue-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                                }`}
+                                className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${activeTab === id
+                                    ? 'border-blue-500 text-blue-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                    }`}
                             >
                                 <Icon className="w-4 h-4" />
                                 <span>{label}</span>

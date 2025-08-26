@@ -14,6 +14,118 @@ const UAZ_ADMIN_TOKEN = 'clNjDFU0jDHs0wZsEceKtY0ft9vrgShFZ7tdtH8UipSJZk5Nig';
 const instanceTokens = new Map(); // barbershopId -> instanceToken
 const instanceStatus = new Map();  // barbershopId -> status
 
+// Função para salvar token da instância no Supabase
+const saveInstanceToken = async (barbershopId, instanceToken, instanceId = null) => {
+    try {
+        console.log(`💾 Salvando token da instância no Supabase: ${barbershopId}`);
+        
+        const updateData = {
+            barbershop_id: barbershopId,
+            instance_token: instanceToken,
+            status: 'connecting',
+            is_connected: false,
+            last_connected_at: new Date().toISOString()
+        };
+        
+        if (instanceId) {
+            updateData.instance_id = instanceId;
+        }
+        
+        // Usar fetch para chamar Supabase REST API
+        const supabaseUrl = 'https://eubmuubokczxlustnpyx.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV1Ym11dWJva2N6eGx1c3RucHl4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczNDk3NzI4MSwiZXhwIjoyMDUwNTUzMjgxfQ.FJjhJhOhEhqhJhOhEhqhJhOhEhqhJhOhEhqhJhOhEhq'; // Service role key
+        
+        const response = await fetch(`${supabaseUrl}/rest/v1/whatsapp_sessions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseKey}`,
+                'apikey': supabaseKey,
+                'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify(updateData)
+        });
+        
+        if (!response.ok) {
+            const error = await response.text();
+            console.error('❌ Erro ao salvar no Supabase:', error);
+        } else {
+            console.log('✅ Token da instância salvo no Supabase');
+        }
+        
+    } catch (error) {
+        console.error('❌ Erro ao salvar token da instância:', error);
+    }
+};
+
+// Função para recuperar token da instância do Supabase
+const getInstanceToken = async (barbershopId) => {
+    try {
+        console.log(`🔍 Buscando token da instância no Supabase: ${barbershopId}`);
+        
+        const supabaseUrl = 'https://eubmuubokczxlustnpyx.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV1Ym11dWJva2N6eGx1c3RucHl4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczNDk3NzI4MSwiZXhwIjoyMDUwNTUzMjgxfQ.FJjhJhOhEhqhJhOhEhqhJhOhEhqhJhOhEhqhJhOhEhq';
+        
+        const response = await fetch(`${supabaseUrl}/rest/v1/whatsapp_sessions?barbershop_id=eq.${barbershopId}&select=instance_token,instance_id`, {
+            headers: {
+                'Authorization': `Bearer ${supabaseKey}`,
+                'apikey': supabaseKey
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.length > 0 && data[0].instance_token) {
+                console.log(`✅ Token encontrado no Supabase: ${data[0].instance_token.substring(0, 10)}...`);
+                return data[0].instance_token;
+            }
+        }
+        
+        console.log('ℹ️ Nenhum token encontrado no Supabase');
+        return null;
+        
+    } catch (error) {
+        console.error('❌ Erro ao buscar token da instância:', error);
+        return null;
+    }
+};
+
+// Função para limpar token da instância do Supabase
+const clearInstanceFromSupabase = async (barbershopId) => {
+    try {
+        console.log(`🗑️ Limpando token da instância do Supabase: ${barbershopId}`);
+        
+        const supabaseUrl = 'https://eubmuubokczxlustnpyx.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV1Ym11dWJva2N6eGx1c3RucHl4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczNDk3NzI4MSwiZXhwIjoyMDUwNTUzMjgxfQ.FJjhJhOhEhqhJhOhEhqhJhOhEhqhJhOhEhqhJhOhEhq';
+        
+        const response = await fetch(`${supabaseUrl}/rest/v1/whatsapp_sessions?barbershop_id=eq.${barbershopId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseKey}`,
+                'apikey': supabaseKey
+            },
+            body: JSON.stringify({
+                instance_token: null,
+                instance_id: null,
+                status: 'disconnected',
+                is_connected: false,
+                last_connected_at: new Date().toISOString()
+            })
+        });
+        
+        if (response.ok) {
+            console.log('✅ Token da instância limpo do Supabase');
+        } else {
+            const error = await response.text();
+            console.error('❌ Erro ao limpar do Supabase:', error);
+        }
+        
+    } catch (error) {
+        console.error('❌ Erro ao limpar token da instância:', error);
+    }
+};
+
 // Verificar se existe build do React
 const distPath = path.join(__dirname, 'dist');
 const hasReactBuild = fs.existsSync(distPath);
@@ -219,6 +331,15 @@ const server = http.createServer(async (req, res) => {
                 // Verificar se já existe instância para esta barbearia
                 let instanceToken = instanceTokens.get(barbershopId);
                 
+                // Se não tem em memória, buscar no Supabase
+                if (!instanceToken) {
+                    instanceToken = await getInstanceToken(barbershopId);
+                    if (instanceToken) {
+                        instanceTokens.set(barbershopId, instanceToken);
+                        console.log(`✅ Token recuperado do Supabase: ${instanceToken.substring(0, 10)}...`);
+                    }
+                }
+                
                 if (!instanceToken) {
                     // Criar nova instância
                     console.log('📝 Criando nova instância UAZ...');
@@ -235,6 +356,9 @@ const server = http.createServer(async (req, res) => {
                     if (createResult.token) {
                         instanceToken = createResult.token;
                         instanceTokens.set(barbershopId, instanceToken);
+                        
+                        // Salvar no Supabase
+                        await saveInstanceToken(barbershopId, instanceToken, createResult.instance?.id);
                         
                         console.log(`✅ Instância criada! Token: ${instanceToken.substring(0, 10)}...`);
                     } else {
@@ -256,13 +380,24 @@ const server = http.createServer(async (req, res) => {
                     phone: finalPhone
                 }, false, instanceToken);
                 
-                // Extrair QR Code e Pairing Code da resposta
-                const qrcode = connectResult.instance?.qrcode || null;
-                const paircode = connectResult.instance?.paircode || null;
+                console.log('📱 Resposta completa da UAZ API:', JSON.stringify(connectResult, null, 2));
+                
+                // Extrair dados da resposta
+                const isConnected = connectResult.connected || false;
+                const qrcode = connectResult.instance?.qrcode || connectResult.qrcode || null;
+                const paircode = connectResult.instance?.paircode || connectResult.paircode || null;
+                
+                // Determinar status real
+                let realStatus = 'connecting';
+                if (isConnected) {
+                    realStatus = 'connected';
+                } else if (qrcode || paircode) {
+                    realStatus = 'waiting_scan';
+                }
                 
                 instanceStatus.set(barbershopId, {
-                    status: 'connecting',
-                    connected: connectResult.connected || false,
+                    status: realStatus,
+                    connected: isConnected,
                     instanceToken: instanceToken,
                     phone: finalPhone,
                     qrcode: qrcode,
@@ -271,18 +406,20 @@ const server = http.createServer(async (req, res) => {
                 });
 
                 console.log('✅ Processo de conexão iniciado:', {
-                    connected: connectResult.connected,
+                    connected: isConnected,
+                    status: realStatus,
                     hasQR: !!qrcode,
-                    hasPairCode: !!paircode
+                    hasPairCode: !!paircode,
+                    response: connectResult.response
                 });
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ 
                     success: true, 
-                    message: 'Conectando WhatsApp via UAZ API...',
+                    message: isConnected ? 'WhatsApp já conectado!' : 'Aguardando conexão...',
                     instanceName: barbershopId,
-                    status: 'connecting',
-                    connected: connectResult.connected || false,
+                    status: realStatus,
+                    connected: isConnected,
                     phone: finalPhone,
                     qrcode: qrcode,
                     paircode: paircode,
@@ -307,7 +444,15 @@ const server = http.createServer(async (req, res) => {
         const barbershopId = pathname.split('/').pop();
         
         try {
-            const instanceToken = instanceTokens.get(barbershopId);
+            let instanceToken = instanceTokens.get(barbershopId);
+            
+            // Se não tem em memória, buscar no Supabase
+            if (!instanceToken) {
+                instanceToken = await getInstanceToken(barbershopId);
+                if (instanceToken) {
+                    instanceTokens.set(barbershopId, instanceToken);
+                }
+            }
             
             if (!instanceToken) {
                 res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -324,8 +469,10 @@ const server = http.createServer(async (req, res) => {
             // Verificar status da instância via UAZ API
             const result = await callUazAPI('/instance/status', 'GET', null, false, instanceToken);
             
+            console.log('📊 Status completo da UAZ API:', JSON.stringify(result, null, 2));
+            
             const connected = result.connected || false;
-            const status = connected ? 'connected' : 'disconnected';
+            const status = connected ? 'connected' : (result.instance?.qrcode || result.qrcode ? 'waiting_scan' : 'disconnected');
             
             instanceStatus.set(barbershopId, {
                 status,
@@ -366,7 +513,15 @@ const server = http.createServer(async (req, res) => {
         const barbershopId = pathname.split('/').pop();
         
         try {
-            const instanceToken = instanceTokens.get(barbershopId);
+            let instanceToken = instanceTokens.get(barbershopId);
+            
+            // Se não tem em memória, buscar no Supabase
+            if (!instanceToken) {
+                instanceToken = await getInstanceToken(barbershopId);
+                if (instanceToken) {
+                    instanceTokens.set(barbershopId, instanceToken);
+                }
+            }
             
             if (!instanceToken) {
                 res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -457,7 +612,15 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
-                const instanceToken = instanceTokens.get(barbershopId);
+                let instanceToken = instanceTokens.get(barbershopId);
+                
+                // Se não tem em memória, buscar no Supabase
+                if (!instanceToken) {
+                    instanceToken = await getInstanceToken(barbershopId);
+                    if (instanceToken) {
+                        instanceTokens.set(barbershopId, instanceToken);
+                    }
+                }
                 
                 if (!instanceToken) {
                     res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -536,6 +699,9 @@ const server = http.createServer(async (req, res) => {
             instanceTokens.delete(barbershopId);
             instanceStatus.delete(barbershopId);
             
+            // Limpar do Supabase
+            await clearInstanceFromSupabase(barbershopId);
+            
             console.log('✅ WhatsApp desconectado e instância deletada');
             
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -584,6 +750,9 @@ const server = http.createServer(async (req, res) => {
             // Limpar dados locais
             instanceTokens.delete(barbershopId);
             instanceStatus.delete(barbershopId);
+            
+            // Limpar do Supabase
+            await clearInstanceFromSupabase(barbershopId);
             
             console.log('✅ Reset completo realizado');
             
