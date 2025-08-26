@@ -1,4 +1,6 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const cors = require('cors');
 const axios = require('axios');
 const cron = require('node-cron');
@@ -15,6 +17,15 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Servir arquivos estáticos do React (se existir build)
+const distPath = path.join(__dirname, 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  console.log('✅ Servindo frontend React do diretório dist/');
+} else {
+  console.log('⚠️ Diretório dist/ não encontrado - execute npm run build');
+}
 
 // Função para enviar mensagem via WhatsApp API
 async function sendWhatsAppMessage(phone, message, instanceId = 'default') {
@@ -224,18 +235,45 @@ app.post('/api/whatsapp/test', async (req, res) => {
   }
 });
 
-// 404 para outras rotas
+// Servir React app para rotas não-API
 app.get('*', (req, res) => {
-  res.status(404).json({
-    error: 'Endpoint não encontrado',
-    service: 'Hairfy WhatsApp Reminders API',
-    availableEndpoints: {
-      root: 'GET /',
-      health: 'GET /health',
-      processReminders: 'POST /api/reminders/process',
-      testWhatsApp: 'POST /api/whatsapp/test'
-    }
-  });
+  // Se for uma rota de API, retornar 404 JSON
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({
+      error: 'Endpoint da API não encontrado',
+      availableEndpoints: {
+        health: 'GET /health',
+        processReminders: 'POST /api/reminders/process',
+        testWhatsApp: 'POST /api/whatsapp/test'
+      }
+    });
+  }
+
+  // Para outras rotas, tentar servir o React app
+  const indexPath = path.join(__dirname, 'dist', 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    // Se não houver build do React, mostrar instruções
+    res.send(`
+      <html>
+        <head><title>Hairfy - Build Necessário</title></head>
+        <body style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+          <h1>🚧 Frontend não disponível</h1>
+          <p>Para ver o frontend, execute:</p>
+          <pre style="background: #f5f5f5; padding: 20px; border-radius: 8px;">npm run build</pre>
+          <hr style="margin: 40px 0;">
+          <h2>📡 API Ativa</h2>
+          <p>A API de lembretes está funcionando:</p>
+          <ul style="text-align: left; display: inline-block;">
+            <li><a href="/health">GET /health</a> - Status da API</li>
+            <li>POST /api/reminders/process - Processar lembretes</li>
+            <li>POST /api/whatsapp/test - Testar WhatsApp</li>
+          </ul>
+        </body>
+      </html>
+    `);
+  }
 });
 
 // Iniciar servidor
