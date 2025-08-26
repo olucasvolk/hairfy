@@ -33,6 +33,7 @@ const WhatsAppConfig: React.FC = () => {
     const [testMessage, setTestMessage] = useState('');
     const [testLoading, setTestLoading] = useState(false);
     const [socket, setSocket] = useState<Socket | null>(null);
+    const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
     
     // Template form states
     const [showTemplateForm, setShowTemplateForm] = useState(false);
@@ -53,6 +54,9 @@ const WhatsAppConfig: React.FC = () => {
         return () => {
             if (socket) {
                 socket.disconnect();
+            }
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
             }
         };
     }, [barbershop?.id]);
@@ -94,6 +98,54 @@ const WhatsAppConfig: React.FC = () => {
             setQrCodeImage('');
             updateSessionInDatabase('disconnected');
         });
+    };
+
+    const startQRPolling = () => {
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+        }
+
+        const interval = setInterval(async () => {
+            if (!barbershop?.id) return;
+
+            try {
+                // Check QR code
+                const qrResponse = await fetch(`/api/whatsapp/qr/${barbershop.id}`);
+                const qrResult = await qrResponse.json();
+                
+                if (qrResult.qr) {
+                    setQrCodeImage(qrResult.qr);
+                    setSession(prev => ({ ...prev!, status: 'connecting' }));
+                }
+
+                // Check status
+                const statusResponse = await fetch(`/api/whatsapp/status/${barbershop.id}`);
+                const statusResult = await statusResponse.json();
+                
+                if (statusResult.connected) {
+                    setSession(prev => ({
+                        ...prev!,
+                        status: 'connected',
+                        is_connected: true,
+                        phone_number: statusResult.phone ? `+${statusResult.phone}` : prev?.phone_number
+                    }));
+                    setQrCodeImage('');
+                    updateSessionInDatabase('connected', statusResult.phone ? `+${statusResult.phone}` : undefined);
+                    clearInterval(interval);
+                    setPollingInterval(null);
+                }
+            } catch (error) {
+                console.error('Erro no polling:', error);
+            }
+        }, 2000); // Poll every 2 seconds
+
+        setPollingInterval(interval);
+
+        // Stop polling after 5 minutes
+        setTimeout(() => {
+            clearInterval(interval);
+            setPollingInterval(null);
+        }, 300000);
     };
 
     const fetchWhatsAppData = async () => {
@@ -178,9 +230,13 @@ const WhatsAppConfig: React.FC = () => {
                         updateSessionInDatabase('connected', statusResult.phone ? `+${statusResult.phone}` : undefined);
                     } else {
                         setSession(prev => ({ ...prev!, status: 'connecting' }));
+                        // Start polling for QR code
+                        startQRPolling();
                     }
                 } else {
                     setSession(prev => ({ ...prev!, status: 'connecting' }));
+                    // Start polling for QR code
+                    startQRPolling();
                 }
             } else {
                 console.error('Erro ao conectar:', result.error);
