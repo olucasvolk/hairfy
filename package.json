@@ -7,7 +7,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview --port 4173 --host",
-    "start": "node simple-server.js",
+    "start": "node digitalocean-server.js",
     "whatsapp": "node whatsapp-server.js",
     "start:full": "concurrently \"npm run whatsapp\" \"npm run dev\""
   },

@@ -264,8 +264,6 @@ function getWhatsAppStatus(barbershopId, res) {
 
 // Static file server
 function serveStaticFile(req, res, pathname) {
-  console.log(`Serving static file: ${pathname}`);
-  
   let filePath = path.join(__dirname, 'dist');
   
   if (pathname === '/') {
@@ -274,12 +272,9 @@ function serveStaticFile(req, res, pathname) {
     filePath = path.join(filePath, pathname);
   }
 
-  console.log(`File path: ${filePath}`);
-
   // Security check
   const distPath = path.join(__dirname, 'dist');
   if (!filePath.startsWith(distPath)) {
-    console.log('Security check failed - forbidden');
     res.writeHead(403);
     res.end('Forbidden');
     return;
@@ -287,17 +282,15 @@ function serveStaticFile(req, res, pathname) {
 
   fs.readFile(filePath, (err, data) => {
     if (err) {
-      console.log(`File not found: ${filePath}, serving index.html for SPA`);
       // If file not found, serve index.html for SPA
       const indexPath = path.join(__dirname, 'dist', 'index.html');
       fs.readFile(indexPath, (indexErr, indexData) => {
         if (indexErr) {
           console.error('Index.html not found:', indexErr);
           res.writeHead(404);
-          res.end('Not Found - Index.html missing');
+          res.end('Not Found');
           return;
         }
-        console.log('Serving index.html for SPA');
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end(indexData);
       });
@@ -314,11 +307,11 @@ function serveStaticFile(req, res, pathname) {
       '.png': 'image/png',
       '.jpg': 'image/jpeg',
       '.gif': 'image/gif',
-      '.svg': 'image/svg+xml'
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon'
     };
 
     const contentType = contentTypes[ext] || 'application/octet-stream';
-    console.log(`Serving file: ${filePath} with content-type: ${contentType}`);
     res.writeHead(200, { 'Content-Type': contentType });
     res.end(data);
   });
