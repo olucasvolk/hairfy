@@ -8,7 +8,7 @@
     "build:full": "chmod +x build.sh && ./build.sh && npm run build",
     "lint": "eslint .",
     "preview": "vite preview --port 4173 --host",
-    "start": "node evolution-server.js",
+    "start": "node integrated-evolution-server.js",
     "start:do": "node digitalocean-server.js",
     "whatsapp": "node whatsapp-server.js",
     "dev:whatsapp": "node dev-server.js",
@@ -37,7 +37,7 @@
     "tailwindcss": "^3.4.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
-    "node-fetch": "^2.7.0"
+    "@whiskeysockets/baileys": "^6.7.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.27.0",

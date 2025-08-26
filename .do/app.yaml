@@ -1,4 +1,4 @@
-name: hairfy-evolution
+name: hairfy-integrated
 services:
 - name: web
   source_dir: /
@@ -15,7 +15,3 @@ services:
     value: production
   - key: PORT
     value: "3001"
-  - key: EVOLUTION_API_URL
-    value: "https://evolution-api.com"
-  - key: EVOLUTION_API_KEY
-    value: "YOUR_EVOLUTION_API_KEY_HERE"
