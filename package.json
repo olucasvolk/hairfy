@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "chmod +x build.sh && ./build.sh",
     "lint": "eslint .",
     "preview": "vite preview --port 4173 --host",
     "start": "node digitalocean-server.js",
