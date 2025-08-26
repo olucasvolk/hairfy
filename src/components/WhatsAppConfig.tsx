@@ -3,14 +3,12 @@ import { motion } from 'framer-motion';
 import { MessageCircle, Smartphone, XCircle, RefreshCw, Settings, Send, Plus, Edit, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useDashboard } from '../contexts/DashboardContext';
-import { io, Socket } from 'socket.io-client';
 
 interface WhatsAppSession {
     id: string;
     phone_number?: string;
     is_connected: boolean;
     status: 'disconnected' | 'connecting' | 'connected' | 'error';
-    qr_code?: string;
     last_connected_at?: string;
 }
 
@@ -32,8 +30,6 @@ const WhatsAppConfig: React.FC = () => {
     const [testPhone, setTestPhone] = useState('');
     const [testMessage, setTestMessage] = useState('');
     const [testLoading, setTestLoading] = useState(false);
-    const [socket, setSocket] = useState<Socket | null>(null);
-    const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
     
     // Template form states
     const [showTemplateForm, setShowTemplateForm] = useState(false);
@@ -48,171 +44,54 @@ const WhatsAppConfig: React.FC = () => {
     useEffect(() => {
         if (barbershop?.id) {
             fetchWhatsAppData();
-            setupSocket();
         }
-        
-        return () => {
-            if (socket) {
-                socket.disconnect();
-            }
-            if (pollingInterval) {
-                clearInterval(pollingInterval);
-            }
-        };
     }, [barbershop?.id]);
-
-    const setupSocket = () => {
-        if (!barbershop?.id) return;
-
-        try {
-            // Use localhost:3001 in development, current origin in production
-            const socketUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : window.location.origin;
-            const newSocket = io(socketUrl, {
-                transports: ['polling', 'websocket'],
-                timeout: 20000,
-                forceNew: true
-            });
-            
-            newSocket.on('connect', () => {
-                console.log('✅ Socket.IO conectado para UAZ API');
-            });
-
-            newSocket.on('connect_error', (error) => {
-                console.warn('⚠️ Socket.IO erro de conexão:', error);
-                // Continue usando polling HTTP como fallback
-            });
-
-            newSocket.on('disconnect', (reason) => {
-                console.log('🔌 Socket.IO desconectado:', reason);
-            });
-
-            setSocket(newSocket);
-
-            // Escutar eventos gerais do WhatsApp (UAZ API não usa eventos específicos por instância)
-            newSocket.on('whatsapp_status', (data) => {
-                console.log('📱 Status WhatsApp atualizado:', data);
-                if (data.status === 'connected') {
-                    setSession(prev => ({
-                        ...prev!,
-                        status: 'connected',
-                        is_connected: true,
-                        phone_number: data.phoneNumber
-                    }));
-                    setQrCodeImage('');
-                    updateSessionInDatabase('connected', data.phoneNumber);
-                } else if (data.status === 'disconnected') {
-                    setSession(prev => ({ ...prev!, status: 'disconnected', is_connected: false }));
-                    setQrCodeImage('');
-                    updateSessionInDatabase('disconnected');
-                }
-            });
-
-        } catch (error) {
-            console.error('❌ Erro ao configurar Socket.IO:', error);
-            // Continue sem Socket.IO, usando apenas polling HTTP
-        }
-    };
-
-    const startQRPolling = () => {
-        if (pollingInterval) {
-            clearInterval(pollingInterval);
-        }
-
-        const interval = setInterval(async () => {
-            if (!barbershop?.id) return;
-
-            try {
-                const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
-                
-                // Check QR code
-                const qrResponse = await fetch(`${baseUrl}/api/whatsapp/qr/${barbershop.id}`);
-                const qrResult = await qrResponse.json();
-                
-                if (qrResult.qr) {
-                    setQrCodeImage(qrResult.qr);
-                    setSession(prev => ({ ...prev!, status: 'connecting' }));
-                }
-
-                // Check status
-                const statusResponse = await fetch(`${baseUrl}/api/whatsapp/status/${barbershop.id}`);
-                const statusResult = await statusResponse.json();
-                
-                if (statusResult.connected) {
-                    setSession(prev => ({
-                        ...prev!,
-                        status: 'connected',
-                        is_connected: true,
-                        phone_number: statusResult.phone ? `+${statusResult.phone}` : prev?.phone_number
-                    }));
-                    setQrCodeImage('');
-                    updateSessionInDatabase('connected', statusResult.phone ? `+${statusResult.phone}` : undefined);
-                    clearInterval(interval);
-                    setPollingInterval(null);
-                }
-            } catch (error) {
-                console.error('Erro no polling:', error);
-            }
-        }, 2000); // Poll every 2 seconds
-
-        setPollingInterval(interval);
-
-        // Stop polling after 5 minutes
-        setTimeout(() => {
-            clearInterval(interval);
-            setPollingInterval(null);
-        }, 300000);
-    };
 
     const fetchWhatsAppData = async () => {
         if (!barbershop?.id) return;
 
         try {
-            // Verificar status real do servidor primeiro
-            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
-            const statusResponse = await fetch(`${baseUrl}/api/whatsapp/status/${barbershop.id}`);
+            // Verificar status real via UAZ API
+            const statusResponse = await fetch(`/api/whatsapp/status/${barbershop.id}`);
             const serverStatus = await statusResponse.json();
             
-            console.log('Status do servidor:', serverStatus);
+            console.log('📱 Status UAZ API:', serverStatus);
 
-            // Buscar sessão do WhatsApp do banco
+            // Buscar sessão do banco
             const { data: sessionData } = await supabase
                 .from('whatsapp_sessions')
                 .select('*')
                 .eq('barbershop_id', barbershop.id)
                 .single();
 
-            console.log('Dados do banco:', sessionData);
-
-            // Usar status do servidor como verdade absoluta
+            // Usar status da UAZ API como verdade absoluta
             if (sessionData) {
                 const realSession = {
                     ...sessionData,
-                    is_connected: serverStatus.connected,
+                    is_connected: serverStatus.connected || false,
                     status: serverStatus.connected ? 'connected' : 'disconnected',
-                    phone_number: serverStatus.phone ? `+${serverStatus.phone}` : sessionData.phone_number
+                    phone_number: serverStatus.phoneNumber || sessionData.phone_number
                 };
                 
-                console.log('Session final:', realSession);
                 setSession(realSession);
 
-                // Atualizar banco se houver diferença
+                // Sincronizar banco com UAZ API se necessário
                 if (sessionData.is_connected !== serverStatus.connected) {
-                    console.log('Sincronizando banco com servidor...');
                     await updateSessionInDatabase(
                         serverStatus.connected ? 'connected' : 'disconnected',
-                        serverStatus.phone ? `+${serverStatus.phone}` : undefined
+                        serverStatus.phoneNumber
                     );
                 }
             } else if (serverStatus.connected) {
-                // Servidor conectado mas sem dados no banco - criar entrada
+                // UAZ API conectada mas sem dados no banco
                 const newSession = {
                     barbershop_id: barbershop.id,
                     is_connected: true,
                     status: 'connected',
-                    phone_number: serverStatus.phone ? `+${serverStatus.phone}` : null
+                    phone_number: serverStatus.phoneNumber
                 };
                 setSession(newSession);
-                await updateSessionInDatabase('connected', serverStatus.phone ? `+${serverStatus.phone}` : undefined);
+                await updateSessionInDatabase('connected', serverStatus.phoneNumber);
             }
 
             // Buscar templates
@@ -226,7 +105,7 @@ const WhatsAppConfig: React.FC = () => {
                 setTemplates(templatesData);
             }
         } catch (error) {
-            console.error('Erro ao buscar dados do WhatsApp:', error);
+            console.error('❌ Erro ao buscar dados WhatsApp:', error);
         }
     };
 
@@ -251,7 +130,7 @@ const WhatsAppConfig: React.FC = () => {
                     ...updateData
                 });
         } catch (error) {
-            console.error('Erro ao atualizar sessão:', error);
+            console.error('❌ Erro ao atualizar sessão:', error);
         }
     };
 
@@ -260,46 +139,93 @@ const WhatsAppConfig: React.FC = () => {
 
         setLoading(true);
         try {
-            // Use localhost:3001 in development
-            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
-            const response = await fetch(`${baseUrl}/api/whatsapp/connect/${barbershop.id}`, {
+            console.log('🚀 Conectando via UAZ API...');
+            
+            const response = await fetch(`/api/whatsapp/connect/${barbershop.id}`, {
                 method: 'POST'
             });
 
             const result = await response.json();
             
             if (result.success) {
-                if (result.message === 'Already connected') {
-                    // Verificar status real
-                    const statusResponse = await fetch(`${baseUrl}/api/whatsapp/status/${barbershop.id}`);
-                    const statusResult = await statusResponse.json();
-                    
-                    if (statusResult.connected) {
-                        setSession(prev => ({ 
-                            ...prev!, 
-                            status: 'connected', 
-                            is_connected: true,
-                            phone_number: statusResult.phone ? `+${statusResult.phone}` : prev?.phone_number
-                        }));
-                        updateSessionInDatabase('connected', statusResult.phone ? `+${statusResult.phone}` : undefined);
-                    } else {
-                        setSession(prev => ({ ...prev!, status: 'connecting' }));
-                        // Start polling for QR code
-                        startQRPolling();
-                    }
+                if (result.connected) {
+                    // Já conectado
+                    setSession(prev => ({ 
+                        ...prev!, 
+                        status: 'connected', 
+                        is_connected: true,
+                        phone_number: result.phoneNumber
+                    }));
+                    updateSessionInDatabase('connected', result.phoneNumber);
                 } else {
+                    // Iniciando conexão - aguardar QR Code
                     setSession(prev => ({ ...prev!, status: 'connecting' }));
-                    // Start polling for QR code
-                    startQRPolling();
+                    await checkForQRCode();
                 }
             } else {
-                console.error('Erro ao conectar:', result.error);
+                console.error('❌ Erro ao conectar:', result.error);
+                alert(`Erro ao conectar: ${result.error}`);
             }
         } catch (error) {
-            console.error('Erro ao conectar WhatsApp:', error);
+            console.error('❌ Erro ao conectar WhatsApp:', error);
+            alert('Erro ao conectar WhatsApp');
         } finally {
             setLoading(false);
         }
+    };
+
+    const checkForQRCode = async () => {
+        if (!barbershop?.id) return;
+
+        let attempts = 0;
+        const maxAttempts = 150; // 5 minutos (2 segundos * 150)
+
+        const checkQR = async () => {
+            try {
+                attempts++;
+                
+                // Verificar QR Code
+                const qrResponse = await fetch(`/api/whatsapp/qr/${barbershop.id}`);
+                const qrResult = await qrResponse.json();
+                
+                if (qrResult.qr) {
+                    setQrCodeImage(qrResult.qr);
+                    setSession(prev => ({ ...prev!, status: 'connecting' }));
+                }
+
+                // Verificar se conectou
+                const statusResponse = await fetch(`/api/whatsapp/status/${barbershop.id}`);
+                const statusResult = await statusResponse.json();
+                
+                if (statusResult.connected) {
+                    setSession(prev => ({
+                        ...prev!,
+                        status: 'connected',
+                        is_connected: true,
+                        phone_number: statusResult.phoneNumber
+                    }));
+                    setQrCodeImage('');
+                    updateSessionInDatabase('connected', statusResult.phoneNumber);
+                    return; // Parar verificação
+                }
+
+                // Continuar verificando se não atingiu limite
+                if (attempts < maxAttempts) {
+                    setTimeout(checkQR, 2000);
+                } else {
+                    console.log('⏰ Timeout na verificação do QR Code');
+                    setSession(prev => ({ ...prev!, status: 'disconnected' }));
+                }
+                
+            } catch (error) {
+                console.error('❌ Erro ao verificar QR Code:', error);
+                if (attempts < maxAttempts) {
+                    setTimeout(checkQR, 2000);
+                }
+            }
+        };
+
+        checkQR();
     };
 
     const handleDisconnect = async () => {
@@ -307,8 +233,9 @@ const WhatsAppConfig: React.FC = () => {
 
         setLoading(true);
         try {
-            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
-            const response = await fetch(`${baseUrl}/api/whatsapp/disconnect/${barbershop.id}`, {
+            console.log('🔌 Desconectando via UAZ API...');
+            
+            const response = await fetch(`/api/whatsapp/disconnect/${barbershop.id}`, {
                 method: 'POST'
             });
 
@@ -318,9 +245,13 @@ const WhatsAppConfig: React.FC = () => {
                 setSession(prev => prev ? { ...prev, is_connected: false, status: 'disconnected' } : null);
                 setQrCodeImage('');
                 updateSessionInDatabase('disconnected');
+                alert('WhatsApp desconectado com sucesso!');
+            } else {
+                alert(`Erro ao desconectar: ${result.error}`);
             }
         } catch (error) {
-            console.error('Erro ao desconectar WhatsApp:', error);
+            console.error('❌ Erro ao desconectar WhatsApp:', error);
+            alert('Erro ao desconectar WhatsApp');
         } finally {
             setLoading(false);
         }
@@ -333,8 +264,9 @@ const WhatsAppConfig: React.FC = () => {
 
         setLoading(true);
         try {
-            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
-            const response = await fetch(`${baseUrl}/api/whatsapp/reset/${barbershop.id}`, {
+            console.log('🔄 Resetando via UAZ API...');
+            
+            const response = await fetch(`/api/whatsapp/reset/${barbershop.id}`, {
                 method: 'POST'
             });
 
@@ -349,7 +281,7 @@ const WhatsAppConfig: React.FC = () => {
                 alert(`Erro no reset: ${result.error}`);
             }
         } catch (error) {
-            console.error('Erro ao resetar WhatsApp:', error);
+            console.error('❌ Erro ao resetar WhatsApp:', error);
             alert('Erro ao resetar WhatsApp');
         } finally {
             setLoading(false);
@@ -361,8 +293,9 @@ const WhatsAppConfig: React.FC = () => {
 
         setTestLoading(true);
         try {
-            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
-            const response = await fetch(`${baseUrl}/api/whatsapp/send/${barbershop.id}`, {
+            console.log('📤 Enviando mensagem teste via UAZ API...');
+            
+            const response = await fetch(`/api/whatsapp/send/${barbershop.id}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -376,14 +309,14 @@ const WhatsAppConfig: React.FC = () => {
             const result = await response.json();
             
             if (result.success) {
-                alert('Mensagem enviada com sucesso!');
+                alert('Mensagem enviada com sucesso via UAZ API!');
                 setTestPhone('');
                 setTestMessage('');
             } else {
                 alert(`Erro ao enviar mensagem: ${result.error}`);
             }
         } catch (error) {
-            console.error('Erro ao enviar mensagem de teste:', error);
+            console.error('❌ Erro ao enviar mensagem de teste:', error);
             alert('Erro ao enviar mensagem');
         } finally {
             setTestLoading(false);
@@ -395,7 +328,6 @@ const WhatsAppConfig: React.FC = () => {
 
         try {
             if (editingTemplate) {
-                // Atualizar template existente
                 const { error } = await supabase
                     .from('whatsapp_templates')
                     .update({
@@ -408,7 +340,6 @@ const WhatsAppConfig: React.FC = () => {
 
                 if (error) throw error;
             } else {
-                // Criar novo template
                 const { error } = await supabase
                     .from('whatsapp_templates')
                     .insert({
@@ -422,7 +353,6 @@ const WhatsAppConfig: React.FC = () => {
                 if (error) throw error;
             }
 
-            // Resetar form e recarregar templates
             setTemplateForm({
                 template_type: 'confirmation',
                 template_name: '',
@@ -433,7 +363,7 @@ const WhatsAppConfig: React.FC = () => {
             setShowTemplateForm(false);
             fetchWhatsAppData();
         } catch (error) {
-            console.error('Erro ao salvar template:', error);
+            console.error('❌ Erro ao salvar template:', error);
             alert('Erro ao salvar template');
         }
     };
@@ -461,7 +391,7 @@ const WhatsAppConfig: React.FC = () => {
             if (error) throw error;
             fetchWhatsAppData();
         } catch (error) {
-            console.error('Erro ao excluir template:', error);
+            console.error('❌ Erro ao excluir template:', error);
             alert('Erro ao excluir template');
         }
     };
@@ -475,7 +405,7 @@ const WhatsAppConfig: React.FC = () => {
                             session?.is_connected ? 'bg-green-500' : 'bg-red-500'
                         }`} />
                         <h3 className="text-lg font-semibold text-gray-900">
-                            Status da Conexão
+                            Status da Conexão UAZ API
                         </h3>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-sm font-medium ${
@@ -489,7 +419,7 @@ const WhatsAppConfig: React.FC = () => {
 
                 {session?.phone_number && (
                     <p className="text-gray-600 mb-4">
-                        Número conectado: {session.phone_number}
+                        📱 Número conectado: {session.phone_number}
                     </p>
                 )}
 
@@ -531,63 +461,117 @@ const WhatsAppConfig: React.FC = () => {
                 {qrCodeImage && (
                     <div className="mt-6 p-4 bg-gray-50 rounded-lg">
                         <h4 className="text-md font-medium text-gray-900 mb-3">
-                            Escaneie o QR Code com seu WhatsApp
+                            📱 Escaneie o QR Code com seu WhatsApp
                         </h4>
                         <div className="flex justify-center">
                             <img 
                                 src={qrCodeImage} 
-                                alt="QR Code WhatsApp" 
+                                alt="QR Code WhatsApp UAZ API" 
                                 className="w-64 h-64 border border-gray-300 rounded-lg"
                             />
                         </div>
                         <p className="text-sm text-gray-600 mt-3 text-center">
-                            Abra o WhatsApp no seu celular → Menu → Dispositivos conectados → Conectar dispositivo
+                            Abra o WhatsApp → Menu → Dispositivos conectados → Conectar dispositivo
                         </p>
                     </div>
                 )}
 
-                {/* Debug Panel */}
-                <div className="mt-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                {/* UAZ API Info */}
+                <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
                     <h4 className="text-md font-medium text-gray-900 mb-3">
-                        🔧 Debug Info
+                        🚀 UAZ API WhatsApp
                     </h4>
                     <div className="text-sm text-gray-600 space-y-1">
-                        <p><strong>Barbershop ID:</strong> {barbershop?.id}</p>
-                        <p><strong>Session Status:</strong> {session?.status || 'null'}</p>
-                        <p><strong>Is Connected:</strong> {session?.is_connected ? 'true' : 'false'}</p>
-                        <p><strong>QR Code:</strong> {qrCodeImage ? 'Disponível' : 'Não disponível'}</p>
-                        <p><strong>Socket:</strong> {socket?.connected ? 'Conectado' : 'Desconectado'}</p>
-                        <p><strong>Polling:</strong> {pollingInterval ? 'Ativo' : 'Inativo'}</p>
+                        <p><strong>✅ Serviço:</strong> UAZ API Profissional</p>
+                        <p><strong>🔗 URL:</strong> https://hairfycombr.uazapi.com</p>
+                        <p><strong>📱 Status:</strong> {session?.status || 'desconectado'}</p>
+                        <p><strong>🔑 Autenticado:</strong> {session?.is_connected ? 'Sim' : 'Não'}</p>
+                        <p><strong>📞 Telefone:</strong> {session?.phone_number || 'Não conectado'}</p>
                     </div>
                     <div className="mt-3 flex space-x-2">
                         <button
-                            onClick={async () => {
-                                const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
-                                const response = await fetch(`${baseUrl}/debug`);
-                                const data = await response.json();
-                                alert(JSON.stringify(data, null, 2));
-                            }}
+                            onClick={fetchWhatsAppData}
                             className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded"
                         >
-                            Ver Debug Server
+                            🔄 Sincronizar
                         </button>
                         <button
-                            onClick={() => {
-                                console.log('Session:', session);
-                                console.log('QR Code:', qrCodeImage);
-                                console.log('Socket:', socket);
+                            onClick={async () => {
+                                try {
+                                    const response = await fetch('/health');
+                                    const data = await response.json();
+                                    alert(JSON.stringify(data, null, 2));
+                                } catch (error) {
+                                    alert('Erro ao verificar health check');
+                                }
                             }}
                             className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded"
                         >
-                            Log Console
-                        </button>
-                        <button
-                            onClick={fetchWhatsAppData}
-                            className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded"
-                        >
-                            Sincronizar
+                            🏥 Health Check
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    );
+
+    const renderTestTab = () => (
+        <div className="space-y-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    Teste de Mensagem UAZ API
+                </h3>
+                
+                {!session?.is_connected && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                        <p className="text-yellow-800">
+                            ⚠️ WhatsApp não está conectado. Conecte primeiro na aba "Conexão".
+                        </p>
+                    </div>
+                )}
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Número do WhatsApp (com DDD)
+                        </label>
+                        <input
+                            type="text"
+                            value={testPhone}
+                            onChange={(e) => setTestPhone(e.target.value)}
+                            placeholder="11999999999"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <p className="text-sm text-gray-500 mt-1">
+                            Digite apenas números (ex: 11999999999)
+                        </p>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Mensagem de Teste
+                        </label>
+                        <textarea
+                            value={testMessage}
+                            onChange={(e) => setTestMessage(e.target.value)}
+                            placeholder="Digite sua mensagem de teste aqui..."
+                            rows={4}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                    </div>
+
+                    <button
+                        onClick={handleSendTest}
+                        disabled={testLoading || !session?.is_connected || !testPhone || !testMessage}
+                        className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    >
+                        {testLoading ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <Send className="w-4 h-4" />
+                        )}
+                        <span>{testLoading ? 'Enviando...' : 'Enviar Teste'}</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -688,7 +672,7 @@ const WhatsAppConfig: React.FC = () => {
                                         is_active: true
                                     });
                                 }}
-                                className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400"
+                                className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
                             >
                                 Cancelar
                             </button>
@@ -697,157 +681,84 @@ const WhatsAppConfig: React.FC = () => {
                 </div>
             )}
 
-            <div className="space-y-4">
+            <div className="grid gap-4">
                 {templates.map((template) => (
                     <div key={template.id} className="bg-white rounded-lg border border-gray-200 p-4">
-                        <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                                <div className="flex items-center space-x-2 mb-2">
-                                    <h4 className="font-medium text-gray-900">{template.template_name}</h4>
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                        template.is_active 
-                                            ? 'bg-green-100 text-green-800' 
-                                            : 'bg-gray-100 text-gray-800'
-                                    }`}>
-                                        {template.is_active ? 'Ativo' : 'Inativo'}
-                                    </span>
-                                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                        {template.template_type === 'confirmation' ? 'Confirmação' : 
-                                         template.template_type === 'reminder' ? 'Lembrete' : 'Personalizado'}
-                                    </span>
-                                </div>
-                                <p className="text-gray-600 text-sm">{template.message_template}</p>
+                        <div className="flex justify-between items-start mb-2">
+                            <div>
+                                <h4 className="font-medium text-gray-900">{template.template_name}</h4>
+                                <span className="text-sm text-gray-500 capitalize">{template.template_type}</span>
                             </div>
-                            <div className="flex space-x-2 ml-4">
+                            <div className="flex space-x-2">
                                 <button
                                     onClick={() => handleEditTemplate(template)}
-                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                    className="text-blue-600 hover:text-blue-800"
                                 >
                                     <Edit className="w-4 h-4" />
                                 </button>
                                 <button
                                     onClick={() => handleDeleteTemplate(template.id)}
-                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                    className="text-red-600 hover:text-red-800"
                                 >
                                     <Trash2 className="w-4 h-4" />
                                 </button>
                             </div>
                         </div>
+                        <p className="text-sm text-gray-600 mb-2">{template.message_template}</p>
+                        <span className={`inline-block px-2 py-1 text-xs rounded-full ${
+                            template.is_active 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-gray-100 text-gray-800'
+                        }`}>
+                            {template.is_active ? 'Ativo' : 'Inativo'}
+                        </span>
                     </div>
                 ))}
-
-                {templates.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                        Nenhum template encontrado. Crie seu primeiro template!
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-
-    const renderTestTab = () => (
-        <div className="space-y-6">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    Enviar Mensagem de Teste
-                </h3>
-
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Número do WhatsApp
-                        </label>
-                        <input
-                            type="tel"
-                            value={testPhone}
-                            onChange={(e) => setTestPhone(e.target.value)}
-                            placeholder="Ex: +5511999999999"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Mensagem
-                        </label>
-                        <textarea
-                            value={testMessage}
-                            onChange={(e) => setTestMessage(e.target.value)}
-                            placeholder="Digite sua mensagem de teste..."
-                            rows={4}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                    </div>
-
-                    <button
-                        onClick={handleSendTest}
-                        disabled={!testPhone || !testMessage || testLoading || !session?.is_connected}
-                        className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                    >
-                        {testLoading ? (
-                            <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : (
-                            <Send className="w-4 h-4" />
-                        )}
-                        <span>{testLoading ? 'Enviando...' : 'Enviar Teste'}</span>
-                    </button>
-
-                    {!session?.is_connected && (
-                        <p className="text-sm text-amber-600">
-                            ⚠️ WhatsApp deve estar conectado para enviar mensagens
-                        </p>
-                    )}
-                </div>
             </div>
         </div>
     );
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center space-x-3">
-                <MessageCircle className="w-8 h-8 text-green-600" />
-                <div>
-                    <h2 className="text-2xl font-bold text-gray-900">WhatsApp</h2>
-                    <p className="text-gray-600">Configure a integração com WhatsApp</p>
-                </div>
+        <div className="max-w-6xl mx-auto p-6">
+            <div className="mb-8">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                    Configuração WhatsApp
+                </h1>
+                <p className="text-gray-600">
+                    Configure e gerencie a integração WhatsApp via UAZ API
+                </p>
             </div>
 
-            <div className="border-b border-gray-200">
-                <nav className="-mb-px flex space-x-8">
-                    {[
-                        { id: 'connection', name: 'Conexão', icon: Smartphone },
-                        { id: 'templates', name: 'Templates', icon: Settings },
-                        { id: 'test', name: 'Teste', icon: Send }
-                    ].map((tab) => {
-                        const Icon = tab.icon;
-                        return (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="border-b border-gray-200">
+                    <nav className="flex space-x-8 px-6">
+                        {[
+                            { id: 'connection', label: 'Conexão', icon: MessageCircle },
+                            { id: 'templates', label: 'Templates', icon: Settings },
+                            { id: 'test', label: 'Teste', icon: Send }
+                        ].map(({ id, label, icon: Icon }) => (
                             <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id as any)}
-                                className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm ${
-                                    activeTab === tab.id
+                                key={id}
+                                onClick={() => setActiveTab(id as any)}
+                                className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${
+                                    activeTab === id
                                         ? 'border-blue-500 text-blue-600'
                                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                 }`}
                             >
                                 <Icon className="w-4 h-4" />
-                                <span>{tab.name}</span>
+                                <span>{label}</span>
                             </button>
-                        );
-                    })}
-                </nav>
-            </div>
+                        ))}
+                    </nav>
+                </div>
 
-            <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-            >
-                {activeTab === 'connection' && renderConnectionTab()}
-                {activeTab === 'templates' && renderTemplatesTab()}
-                {activeTab === 'test' && renderTestTab()}
-            </motion.div>
+                <div className="p-6">
+                    {activeTab === 'connection' && renderConnectionTab()}
+                    {activeTab === 'templates' && renderTemplatesTab()}
+                    {activeTab === 'test' && renderTestTab()}
+                </div>
+            </div>
         </div>
     );
 };

@@ -440,7 +440,7 @@ const server = http.createServer(async (req, res) => {
   }));
 });
 
-// Socket.IO para comunicação em tempo real
+// Socket.IO apenas para compatibilidade (não usado pela UAZ API)
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -449,15 +449,7 @@ const io = new Server(server, {
 });
 
 io.on('connection', (socket) => {
-  console.log('🔌 Cliente conectado via Socket.IO:', socket.id);
-  
-  // Enviar status das instâncias ativas
-  socket.emit('instances_status', {
-    instances: Array.from(instanceStatus.entries()).map(([id, data]) => ({
-      id,
-      ...data
-    }))
-  });
+  console.log('🔌 Cliente conectado (compatibilidade):', socket.id);
   
   socket.on('disconnect', () => {
     console.log('🔌 Cliente desconectado:', socket.id);
