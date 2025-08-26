@@ -1,7 +1,5 @@
 const express = require('express');
 const http = require('http');
-const fs = require('fs');
-const path = require('path');
 const cors = require('cors');
 const axios = require('axios');
 const cron = require('node-cron');
@@ -19,7 +17,6 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'dist')));
 
 // Função para enviar mensagem via WhatsApp API
 async function sendWhatsAppMessage(phone, message, instanceId = 'default') {
@@ -169,6 +166,22 @@ async function processReminders() {
   }
 }
 
+// Rota raiz
+app.get('/', (req, res) => {
+  res.json({
+    service: 'Hairfy WhatsApp Reminders API',
+    version: '1.0.0',
+    status: 'active',
+    description: 'API para envio automático de lembretes via WhatsApp Business API',
+    endpoints: {
+      health: 'GET /health',
+      processReminders: 'POST /api/reminders/process',
+      testWhatsApp: 'POST /api/whatsapp/test'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({
@@ -213,14 +226,18 @@ app.post('/api/whatsapp/test', async (req, res) => {
   }
 });
 
-// Servir React app para todas as outras rotas
+// Rota 404 para endpoints não encontrados
 app.get('*', (req, res) => {
-  const indexPath = path.join(__dirname, 'dist', 'index.html');
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    res.status(404).send('App não encontrado. Execute npm run build primeiro.');
-  }
+  res.status(404).json({
+    error: 'Endpoint não encontrado',
+    service: 'Hairfy WhatsApp Reminders API',
+    availableEndpoints: {
+      root: 'GET /',
+      health: 'GET /health',
+      processReminders: 'POST /api/reminders/process',
+      testWhatsApp: 'POST /api/whatsapp/test'
+    }
+  });
 });
 
 // Iniciar servidor
