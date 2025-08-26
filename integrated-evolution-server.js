@@ -320,12 +320,27 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/whatsapp/status/') && method === 'GET') {
         const barbershopId = pathname.split('/').pop();
         const socket = whatsappSockets.get(barbershopId);
+        const hasQR = qrCodes.has(barbershopId);
+
+        let status = 'disconnected';
+        let connected = false;
+
+        if (socket) {
+            if (hasQR) {
+                status = 'connecting'; // Socket existe e QR Code disponível
+            } else {
+                status = 'connected'; // Socket existe e sem QR Code = conectado
+                connected = true;
+            }
+        }
+
+        console.log(`📊 Status para ${barbershopId}: socket=${!!socket}, qr=${hasQR}, status=${status}`);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
-            connected: socket ? true : false,
-            hasQR: qrCodes.has(barbershopId),
-            status: socket ? 'connected' : 'disconnected',
+            connected,
+            hasQR,
+            status,
             instanceName: barbershopId,
             evolutionIntegrated: true
         }));
@@ -338,28 +353,36 @@ const server = http.createServer(async (req, res) => {
         const socket = whatsappSockets.get(barbershopId);
         const qr = qrCodes.get(barbershopId);
 
+        console.log(`📷 QR Code solicitado para: ${barbershopId}, socket: ${!!socket}, qr: ${!!qr}`);
+
         if (qr) {
             try {
                 const qrImage = await QRCode.toDataURL(qr);
+                console.log(`✅ QR Code gerado para: ${barbershopId}`);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ qr: qrImage }));
             } catch (error) {
+                console.error(`❌ Erro ao gerar QR Code para ${barbershopId}:`, error);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'Erro ao gerar QR Code' }));
             }
         } else if (socket) {
-            // Socket existe mas não há QR Code - provavelmente já conectado
-            res.writeHead(200, { 'Content-Type': 'application/json' });
+            // Socket existe mas não há QR Code ainda - aguardando
+            console.log(`⏳ Socket existe mas QR Code ainda não gerado para: ${barbershopId}`);
+            res.writeHead(202, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
-                error: 'WhatsApp já está conectado',
-                connected: true
+                error: 'QR Code ainda não disponível, aguarde...',
+                status: 'connecting',
+                message: 'WhatsApp está conectando, QR Code será gerado em breve'
             }));
         } else {
             // Não há socket nem QR Code - precisa conectar primeiro
+            console.log(`❌ Nenhum socket encontrado para: ${barbershopId}`);
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 error: 'QR Code não encontrado. Conecte o WhatsApp primeiro.',
-                needsConnection: true
+                needsConnection: true,
+                status: 'disconnected'
             }));
         }
         return;
