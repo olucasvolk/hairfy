@@ -99,6 +99,27 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Debug endpoint
+  if (pathname === '/debug' || pathname === '/api/debug') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      service: 'hairfy-integrated-evolution',
+      evolutionAvailable,
+      activeInstances: Array.from(whatsappSockets.keys()),
+      qrCodes: Array.from(qrCodes.keys()),
+      authStates: Array.from(authStates.keys()),
+      environment: {
+        nodeVersion: process.version,
+        platform: process.platform,
+        arch: process.arch
+      },
+      baileys: evolutionAvailable ? {
+        version: require('@whiskeysockets/baileys/package.json').version
+      } : null
+    }));
+    return;
+  }
+
   // Servir arquivos estáticos do React
   if (hasReactBuild && !pathname.startsWith('/api/')) {
     let filePath = path.join(distPath, pathname === '/' ? 'index.html' : pathname);
@@ -317,6 +338,7 @@ const server = http.createServer(async (req, res) => {
   // Obter QR Code
   if (pathname.startsWith('/api/whatsapp/qr/') && method === 'GET') {
     const barbershopId = pathname.split('/').pop();
+    const socket = whatsappSockets.get(barbershopId);
     const qr = qrCodes.get(barbershopId);
     
     if (qr) {
@@ -328,9 +350,20 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Erro ao gerar QR Code' }));
       }
+    } else if (socket) {
+      // Socket existe mas não há QR Code - provavelmente já conectado
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ 
+        error: 'WhatsApp já está conectado',
+        connected: true
+      }));
     } else {
+      // Não há socket nem QR Code - precisa conectar primeiro
       res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'QR Code não encontrado' }));
+      res.end(JSON.stringify({ 
+        error: 'QR Code não encontrado. Conecte o WhatsApp primeiro.',
+        needsConnection: true
+      }));
     }
     return;
   }
