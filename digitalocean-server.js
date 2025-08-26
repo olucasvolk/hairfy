@@ -44,6 +44,20 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Debug endpoint
+  if (pathname === '/debug' || pathname === '/api/debug') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      activeClients: Array.from(whatsappClients.keys()),
+      qrCodes: Array.from(qrCodes.keys()),
+      clientsCount: whatsappClients.size,
+      qrCodesCount: qrCodes.size,
+      uptime: process.uptime()
+    }));
+    return;
+  }
+
   // WhatsApp API endpoints
   if (pathname.startsWith('/api/whatsapp/')) {
     handleWhatsAppAPI(req, res, pathname, method);
@@ -136,6 +150,17 @@ function handleWhatsAppAPI(req, res, pathname, method) {
     return;
   }
 
+  if (method === 'POST' && pathParts[3] === 'reset') {
+    const barbershopId = pathParts[4];
+    if (barbershopId) {
+      resetWhatsApp(barbershopId, res);
+    } else {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Barbershop ID required' }));
+    }
+    return;
+  }
+
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Endpoint not found' }));
 }
@@ -143,15 +168,34 @@ function handleWhatsAppAPI(req, res, pathname, method) {
 // WhatsApp functions
 async function connectWhatsApp(barbershopId, res) {
   try {
-    console.log(`🔄 Conectando WhatsApp para barbearia: ${barbershopId}`);
+    console.log(`🔄 [${new Date().toISOString()}] Tentativa de conexão para: ${barbershopId}`);
     
     if (whatsappClients.has(barbershopId)) {
-      console.log(`✅ WhatsApp já conectado para ${barbershopId}`);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, message: 'Already connected' }));
-      return;
+      const client = whatsappClients.get(barbershopId);
+      const isReady = client && client.info;
+      
+      console.log(`⚠️ [${barbershopId}] Cliente já existe. Status: ${isReady ? 'READY' : 'NOT_READY'}`);
+      
+      if (!isReady) {
+        console.log(`🔄 [${barbershopId}] Cliente existe mas não está pronto. Removendo e reconectando...`);
+        try {
+          await client.destroy();
+        } catch (e) {
+          console.log(`⚠️ [${barbershopId}] Erro ao destruir cliente antigo:`, e.message);
+        }
+        whatsappClients.delete(barbershopId);
+        qrCodes.delete(barbershopId);
+        // Continue with new connection below
+      } else {
+        console.log(`✅ [${barbershopId}] Cliente já conectado e pronto`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Already connected' }));
+        return;
+      }
     }
 
+    console.log(`🚀 [${barbershopId}] Criando novo cliente WhatsApp...`);
+    
     const client = new Client({
       authStrategy: new LocalAuth({
         clientId: barbershopId,
@@ -171,6 +215,8 @@ async function connectWhatsApp(barbershopId, res) {
         ]
       }
     });
+
+    console.log(`📝 [${barbershopId}] Cliente criado, configurando eventos...`);
 
     client.on('qr', async (qr) => {
       console.log(`📱 QR Code gerado para ${barbershopId}`);
@@ -217,7 +263,12 @@ async function connectWhatsApp(barbershopId, res) {
     });
 
     whatsappClients.set(barbershopId, client);
+    console.log(`💾 [${barbershopId}] Cliente armazenado no Map`);
+    
+    console.log(`🔄 [${barbershopId}] Iniciando cliente...`);
     await client.initialize();
+    
+    console.log(`✅ [${barbershopId}] Cliente inicializado com sucesso`);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, message: 'Connecting...' }));
@@ -279,7 +330,7 @@ async function sendWhatsAppMessage(barbershopId, data, res) {
 function getWhatsAppStatus(barbershopId, res) {
   const client = whatsappClients.get(barbershopId);
   const isConnected = client && client.info;
-  
+
   console.log(`📊 Status para ${barbershopId}: ${isConnected ? 'conectado' : 'desconectado'}`);
 
   res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -291,7 +342,7 @@ function getWhatsAppStatus(barbershopId, res) {
 
 function getQRCode(barbershopId, res) {
   const qrImage = qrCodes.get(barbershopId);
-  
+
   console.log(`📱 QR Code para ${barbershopId}: ${qrImage ? 'disponível' : 'não encontrado'}`);
 
   res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -299,6 +350,36 @@ function getQRCode(barbershopId, res) {
     qr: qrImage || null,
     hasQR: !!qrImage
   }));
+}
+
+async function resetWhatsApp(barbershopId, res) {
+  try {
+    console.log(`🔄 [${barbershopId}] RESET solicitado`);
+    
+    // Remove client if exists
+    const client = whatsappClients.get(barbershopId);
+    if (client) {
+      console.log(`🗑️ [${barbershopId}] Destruindo cliente existente...`);
+      try {
+        await client.destroy();
+      } catch (e) {
+        console.log(`⚠️ [${barbershopId}] Erro ao destruir:`, e.message);
+      }
+      whatsappClients.delete(barbershopId);
+    }
+    
+    // Remove QR code
+    qrCodes.delete(barbershopId);
+    
+    console.log(`✅ [${barbershopId}] Reset concluído`);
+    
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, message: 'Reset completed' }));
+  } catch (error) {
+    console.error(`❌ [${barbershopId}] Erro no reset:`, error);
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: error.message }));
+  }
 }
 
 // Static file server

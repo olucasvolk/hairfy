@@ -278,6 +278,36 @@ const WhatsAppConfig: React.FC = () => {
         }
     };
 
+    const handleReset = async () => {
+        if (!barbershop?.id) return;
+
+        if (!confirm('Tem certeza que deseja resetar a conexão WhatsApp? Isso irá limpar todos os dados de autenticação.')) return;
+
+        setLoading(true);
+        try {
+            const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
+            const response = await fetch(`${baseUrl}/api/whatsapp/reset/${barbershop.id}`, {
+                method: 'POST'
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                setSession(prev => prev ? { ...prev, is_connected: false, status: 'disconnected' } : null);
+                setQrCodeImage('');
+                updateSessionInDatabase('disconnected');
+                alert('Reset realizado com sucesso! Tente conectar novamente.');
+            } else {
+                alert(`Erro no reset: ${result.error}`);
+            }
+        } catch (error) {
+            console.error('Erro ao resetar WhatsApp:', error);
+            alert('Erro ao resetar WhatsApp');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleSendTest = async () => {
         if (!testPhone || !testMessage || !barbershop?.id) return;
 
@@ -439,6 +469,15 @@ const WhatsAppConfig: React.FC = () => {
                             <span>Desconectar</span>
                         </button>
                     )}
+                    
+                    <button
+                        onClick={handleReset}
+                        disabled={loading}
+                        className="flex items-center space-x-2 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                    >
+                        <RefreshCw className="w-4 h-4" />
+                        <span>Reset</span>
+                    </button>
                 </div>
 
                 {qrCodeImage && (
@@ -458,6 +497,44 @@ const WhatsAppConfig: React.FC = () => {
                         </p>
                     </div>
                 )}
+
+                {/* Debug Panel */}
+                <div className="mt-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <h4 className="text-md font-medium text-gray-900 mb-3">
+                        🔧 Debug Info
+                    </h4>
+                    <div className="text-sm text-gray-600 space-y-1">
+                        <p><strong>Barbershop ID:</strong> {barbershop?.id}</p>
+                        <p><strong>Session Status:</strong> {session?.status || 'null'}</p>
+                        <p><strong>Is Connected:</strong> {session?.is_connected ? 'true' : 'false'}</p>
+                        <p><strong>QR Code:</strong> {qrCodeImage ? 'Disponível' : 'Não disponível'}</p>
+                        <p><strong>Socket:</strong> {socket?.connected ? 'Conectado' : 'Desconectado'}</p>
+                        <p><strong>Polling:</strong> {pollingInterval ? 'Ativo' : 'Inativo'}</p>
+                    </div>
+                    <div className="mt-3 flex space-x-2">
+                        <button
+                            onClick={async () => {
+                                const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
+                                const response = await fetch(`${baseUrl}/debug`);
+                                const data = await response.json();
+                                alert(JSON.stringify(data, null, 2));
+                            }}
+                            className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded"
+                        >
+                            Ver Debug Server
+                        </button>
+                        <button
+                            onClick={() => {
+                                console.log('Session:', session);
+                                console.log('QR Code:', qrCodeImage);
+                                console.log('Socket:', socket);
+                            }}
+                            className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded"
+                        >
+                            Log Console
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     );
