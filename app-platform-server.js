@@ -43,7 +43,7 @@ const getPuppeteerConfig = () => {
 };
 
 // Criar servidor HTTP
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
   const method = req.method;
