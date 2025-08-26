@@ -17,7 +17,7 @@ const whatsappClients = new Map();
 const qrCodes = new Map();
 
 // Configuração otimizada para App Platform
-const getPuppeteerConfig = () => {
+const getPuppeteerConfig = async () => {
   const config = {
     headless: true,
     args: [
@@ -30,17 +30,31 @@ const getPuppeteerConfig = () => {
       '--single-process',
       '--disable-gpu',
       '--disable-web-security',
-      '--disable-features=VizDisplayCompositor'
+      '--disable-features=VizDisplayCompositor',
+      '--disable-background-timer-throttling',
+      '--disable-renderer-backgrounding',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-ipc-flooding-protection',
+      '--run-all-compositor-stages-before-draw',
+      '--memory-pressure-off'
     ]
   };
 
   // Tentar usar Chromium otimizado se disponível
   try {
     const chromium = require('@sparticuz/chromium');
-    config.executablePath = chromium.executablePath;
+    
+    // Aguardar o path do executável
+    config.executablePath = await chromium.executablePath();
+    
+    // Adicionar argumentos específicos do @sparticuz/chromium
+    config.args.push(...chromium.args);
+    
     console.log('✅ Usando @sparticuz/chromium otimizado');
+    console.log('📍 Executable path:', config.executablePath);
   } catch (error) {
     console.log('📦 Usando Chromium padrão do puppeteer-core');
+    console.log('❌ Erro ao carregar @sparticuz/chromium:', error.message);
   }
 
   return config;
@@ -75,6 +89,32 @@ const server = http.createServer(async (req, res) => {
       uptime: process.uptime(),
       whatsapp: whatsappClients.size > 0 ? 'active' : 'inactive'
     }));
+    return;
+  }
+
+  // Debug endpoint
+  if (pathname === '/api/debug/chromium' && method === 'GET') {
+    try {
+      const config = await getPuppeteerConfig();
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        chromium: {
+          executablePath: config.executablePath,
+          args: config.args,
+          hasChromium: !!config.executablePath
+        },
+        environment: {
+          platform: process.platform,
+          arch: process.arch,
+          nodeVersion: process.version
+        },
+        whatsappClients: Array.from(whatsappClients.keys())
+      }));
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
+    }
     return;
   }
 
@@ -291,12 +331,14 @@ const server = http.createServer(async (req, res) => {
     try {
       console.log(`🚀 Conectando WhatsApp para barbearia: ${barbershopId}`);
 
+      const puppeteerConfig = await getPuppeteerConfig();
+      
       const client = new Client({
         authStrategy: new LocalAuth({
           clientId: barbershopId,
           dataPath: './.wwebjs_auth'
         }),
-        puppeteer: getPuppeteerConfig()
+        puppeteer: puppeteerConfig
       });
 
       whatsappClients.set(barbershopId, client);
@@ -327,6 +369,16 @@ const server = http.createServer(async (req, res) => {
         if (io) {
           io.emit('disconnected', { barbershopId, reason });
         }
+      });
+
+      client.on('auth_failure', (msg) => {
+        console.log('❌ Falha na autenticação:', msg);
+        whatsappClients.delete(barbershopId);
+        qrCodes.delete(barbershopId);
+      });
+
+      client.on('loading_screen', (percent, message) => {
+        console.log('📱 Carregando WhatsApp:', percent, message);
       });
 
       await client.initialize();
@@ -425,17 +477,43 @@ const server = http.createServer(async (req, res) => {
       try {
         const { phone, message } = JSON.parse(body);
         
+        console.log(`📤 Enviando mensagem para ${phone}: ${message}`);
+        
+        // Verificar se o cliente ainda está conectado
+        const state = await client.getState();
+        console.log('📱 Estado do WhatsApp:', state);
+        
+        if (state !== 'CONNECTED') {
+          throw new Error(`WhatsApp não está conectado. Estado atual: ${state}`);
+        }
+        
         // Formatar número de telefone
         const formattedPhone = phone.replace(/\D/g, '') + '@c.us';
+        console.log('📞 Número formatado:', formattedPhone);
         
-        await client.sendMessage(formattedPhone, message);
+        // Verificar se o número é válido
+        const isRegistered = await client.isRegisteredUser(formattedPhone);
+        if (!isRegistered) {
+          throw new Error('Número não está registrado no WhatsApp');
+        }
+        
+        const result = await client.sendMessage(formattedPhone, message);
+        console.log('✅ Mensagem enviada com sucesso:', result.id);
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, message: 'Mensagem enviada' }));
+        res.end(JSON.stringify({ 
+          success: true, 
+          message: 'Mensagem enviada',
+          messageId: result.id._serialized
+        }));
       } catch (error) {
-        console.error('Erro ao enviar mensagem:', error);
+        console.error('❌ Erro ao enviar mensagem:', error);
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: error.message }));
+        res.end(JSON.stringify({ 
+          success: false, 
+          error: error.message,
+          details: 'Verifique se o WhatsApp está conectado e o número é válido'
+        }));
       }
     });
     return;
