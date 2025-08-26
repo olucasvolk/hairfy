@@ -74,6 +74,60 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Página inicial com instruções
+  if (pathname === '/') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Hairfy WhatsApp API</title>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+          .endpoint { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
+          .method { color: #007acc; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <h1>🚀 Hairfy WhatsApp API</h1>
+        <p>Servidor funcionando no App Platform!</p>
+        
+        <h2>📋 Endpoints disponíveis:</h2>
+        
+        <div class="endpoint">
+          <span class="method">GET</span> /health - Status do servidor
+        </div>
+        
+        <div class="endpoint">
+          <span class="method">POST</span> /api/whatsapp/init - Inicializar WhatsApp
+          <br><small>Body: {"barbershopId": "sua-barbearia"}</small>
+        </div>
+        
+        <div class="endpoint">
+          <span class="method">GET</span> /api/whatsapp/qr?barbershopId=sua-barbearia - Obter QR Code
+        </div>
+        
+        <div class="endpoint">
+          <span class="method">GET</span> /api/whatsapp/status?barbershopId=sua-barbearia - Status da conexão
+        </div>
+        
+        <h2>🧪 Teste rápido:</h2>
+        <p>Acesse: <a href="/health">/health</a> para verificar se está funcionando</p>
+        
+        <h2>📱 Como usar:</h2>
+        <ol>
+          <li>Faça POST para /api/whatsapp/init com seu barbershopId</li>
+          <li>Acesse /api/whatsapp/qr para obter o QR Code</li>
+          <li>Escaneie o QR Code no WhatsApp</li>
+          <li>Pronto! WhatsApp Web conectado</li>
+        </ol>
+      </body>
+      </html>
+    `);
+    return;
+  }
+
   // Inicializar WhatsApp
   if (pathname === '/api/whatsapp/init' && method === 'POST') {
     let body = '';
