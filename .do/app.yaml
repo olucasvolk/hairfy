@@ -1,4 +1,4 @@
-name: hairfy-external-evolution
+name: hairfy-baileys-simple
 services:
 - name: web
   source_dir: /
@@ -15,7 +15,3 @@ services:
     value: production
   - key: PORT
     value: "3001"
-  - key: EVOLUTION_API_URL
-    value: "https://sua-evolution-api.com"
-  - key: EVOLUTION_API_KEY
-    value: "sua-chave-aqui"
