@@ -5,6 +5,7 @@ const url = require('url');
 const { Server } = require('socket.io');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const QRCode = require('qrcode');
+const fs = require('fs');
 
 const PORT = process.env.PORT || 3001;
 
@@ -206,6 +207,8 @@ async function connectWhatsApp(barbershopId, res) {
       }),
       puppeteer: {
         headless: true,
+        // No App Platform, usar o Chromium incluído no Puppeteer
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -214,7 +217,14 @@ async function connectWhatsApp(barbershopId, res) {
           '--no-first-run',
           '--no-zygote',
           '--single-process',
-          '--disable-gpu'
+          '--disable-gpu',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+          '--run-all-compositor-stages-before-draw',
+          '--disable-background-timer-throttling',
+          '--disable-renderer-backgrounding',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-ipc-flooding-protection'
         ]
       }
     });
