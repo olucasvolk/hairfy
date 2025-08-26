@@ -207,8 +207,8 @@ async function connectWhatsApp(barbershopId, res) {
       }),
       puppeteer: {
         headless: true,
-        // No App Platform, usar o Chromium incluído no Puppeteer
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        // Deixar undefined para usar o Chromium do puppeteer-core
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
